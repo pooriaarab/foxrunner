@@ -19,7 +19,10 @@ export {
   type Runner,
   type RunnerEvents,
   type RunnerOptions,
+  type ScheduleOptions,
+  type ScheduleRecord,
   type StepContext,
   type StepDefinition,
 } from "./runner.js";
 export type { LocksLike } from "./lock.js";
+export { nextCron, parseCron, type Cron } from "./cron.js";
