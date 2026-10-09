@@ -2,6 +2,7 @@
 // a task picks up at the last finished step after an unload, a restart or a
 // throw. It never tries to keep the event page alive.
 
+import { nextCron, parseCron } from "./cron.js";
 import { tryLock, type LocksLike } from "./lock.js";
 import { parseTask, SCHEMA_VERSION, type StepRecord, type TaskRecord } from "./record.js";
 import type { Store } from "./store.js";
@@ -75,8 +76,42 @@ export interface RunnerOptions {
   maxOutputBytes?: number;
   /** While a step runs, keep a wake alarm this far ahead, so an unload mid-step gets a wake. Default 30000. */
   watchdogMs?: number;
+  /** A slot later than this counts as missed, and catchUp decides. Default 60000. */
+  graceMs?: number;
   /** Check stored tasks once, right after createRunner. Default true. */
   autoTick?: boolean;
+}
+
+export interface ScheduleOptions {
+  /** Run every this many ms. At least 60000. */
+  every?: number;
+  /** Or a 5-field cron string in local time, such as "0 7 * * 1-5". */
+  cron?: string;
+  input?: unknown;
+  /** Runs missed while Firefox was closed: "once" runs one at the next wake (default), "skip" runs none. */
+  catchUp?: "once" | "skip";
+  /** When the last run is still going: "skip" the slot (default) or "allow" a second task. */
+  overlap?: "skip" | "allow";
+  /** Default: the task name. */
+  id?: string;
+}
+
+export interface ScheduleRecord {
+  v: number;
+  id: string;
+  task: string;
+  every?: number;
+  cron?: string;
+  input: unknown;
+  catchUp: "once" | "skip";
+  overlap: "skip" | "allow";
+  nextRunAt: number;
+  /** When nextRunAt was worked out. */
+  computedAt: number;
+  lastRunAt?: number;
+  lastTaskId?: string;
+  /** Slots skipped because the last run was still going. */
+  skipped: number;
 }
 
 export interface RunnerEvents {
@@ -88,12 +123,20 @@ export interface RunnerEvents {
 export const TASK_PREFIX = "frn:task:";
 export const CONTROL_PREFIX = "frn:ctl:";
 export const WAKE_ALARM = "frn:wake";
+export const SCHEDULE_PREFIX = "frn:schedule:";
 const TERMINAL = new Set(["done", "failed", "cancelled"]);
 const INTERRUPTED = "interrupted: the page unloaded or the browser stopped during this step";
 
 class PermanentError extends Error {}
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+function nextSlot(sch: Pick<ScheduleRecord, "every" | "cron" | "nextRunAt">, from: number, anchored: boolean): number {
+  if (sch.cron !== undefined) return nextCron(parseCron(sch.cron), from);
+  const every = sch.every!;
+  if (!anchored) return from + every;
+  return sch.nextRunAt + every * (Math.floor((from - sch.nextRunAt) / every) + 1);
+}
 
 export function createRunner(options: RunnerOptions) {
   const { store } = options;
@@ -105,6 +148,7 @@ export function createRunner(options: RunnerOptions) {
   const active = new Map<string, Promise<void>>();
   const controllers = new Map<string, AbortController>();
   const watchdogMs = options.watchdogMs ?? 30_000;
+  const graceMs = options.graceMs ?? 60_000;
   let arming = Promise.resolve();
 
   function emit<K extends keyof RunnerEvents>(name: K, event: RunnerEvents[K]) {
@@ -322,6 +366,7 @@ export function createRunner(options: RunnerOptions) {
         if (t.status === "running") when = Math.min(when, now() + watchdogMs);
         if (t.status === "queued") when = Math.min(when, t.runAt ?? now());
       }
+      for (const sch of await schedules()) when = Math.min(when, sch.nextRunAt);
       if (when === Infinity) await options.browser.alarms.clear(WAKE_ALARM);
       else options.browser.alarms.create(WAKE_ALARM, { when });
     }).catch((error) => emit("error", { message: `wake alarm not set: ${message(error)}` }));
@@ -337,7 +382,45 @@ export function createRunner(options: RunnerOptions) {
     void drive(id);
   }
 
+  async function schedules(): Promise<ScheduleRecord[]> {
+    const out: ScheduleRecord[] = [];
+    for (const [key, raw] of await store.entries(SCHEDULE_PREFIX)) {
+      const sch = raw as Partial<ScheduleRecord> | null;
+      if (sch?.v === SCHEMA_VERSION && typeof sch.id === "string" && typeof sch.task === "string" && typeof sch.nextRunAt === "number") out.push(sch as ScheduleRecord);
+      else emit("error", { id: key, message: `schedule ${key} skipped: the record is corrupted or from another version` });
+    }
+    return out;
+  }
+
+  async function runSchedule(sch: ScheduleRecord) {
+    const t = now();
+    if (t < sch.computedAt) sch.nextRunAt = nextSlot(sch, t, false);
+    else if (sch.nextRunAt <= t) {
+      let run = t - sch.nextRunAt <= graceMs || sch.catchUp === "once";
+      if (run && sch.overlap === "skip" && sch.lastTaskId) {
+        const last = await load(sch.lastTaskId);
+        if (last && !TERMINAL.has(last.status)) {
+          run = false;
+          sch.skipped += 1;
+        }
+      }
+      if (run) {
+        const task = await runner.start(sch.task, sch.input, { id: `${sch.id}@${sch.nextRunAt}`, scheduleId: sch.id });
+        sch.lastTaskId = task.id;
+        sch.lastRunAt = t;
+      }
+      sch.nextRunAt = nextSlot(sch, t, true);
+    } else return;
+    sch.computedAt = t;
+    await store.set(SCHEDULE_PREFIX + sch.id, sch);
+  }
+
   async function tick() {
+    await lock("foxrunner:schedules", async () => {
+      for (const sch of await schedules()) {
+        await runSchedule(sch).catch((error) => emit("error", { id: sch.id, message: `schedule ${sch.id}: ${message(error)}` }));
+      }
+    });
     const tasks = await list();
     await Promise.all(tasks.filter((t) => t.status === "running" || t.status === "queued").map((t) => drive(t.id)));
     await Promise.all(active.values());
@@ -353,7 +436,7 @@ export function createRunner(options: RunnerOptions) {
       definitions.set(name, steps);
     },
     /** Save a new task and start it. With the same `id`, a second call returns the first task. */
-    async start(name: string, input: unknown = null, opts: { id?: string } = {}): Promise<TaskRecord> {
+    async start(name: string, input: unknown = null, opts: { id?: string; scheduleId?: string } = {}): Promise<TaskRecord> {
       const def = definitions.get(name);
       if (!def) throw new Error(`no task named ${name}; call define() first`);
       const id = opts.id ?? crypto.randomUUID();
@@ -371,6 +454,7 @@ export function createRunner(options: RunnerOptions) {
           updatedAt: t,
           steps: def.map((s) => ({ name: s.name, status: "pending", attempt: 0, failures: 0 })),
         };
+        if (opts.scheduleId) task.scheduleId = opts.scheduleId;
         await save(task);
         return task;
       });
@@ -380,6 +464,41 @@ export function createRunner(options: RunnerOptions) {
       return task;
     },
     get: load,
+    /** Run a task on an interval or a cron string. Safe to call on every wake: the next slot stays. */
+    async schedule(name: string, opts: ScheduleOptions): Promise<ScheduleRecord> {
+      if (!definitions.has(name)) throw new Error(`no task named ${name}; call define() first`);
+      if ((opts.every === undefined) === (opts.cron === undefined)) throw new Error("give exactly one of every and cron");
+      if (opts.every !== undefined && (!Number.isInteger(opts.every) || opts.every < 60_000)) {
+        throw new RangeError(`every must be a whole number of ms, at least 60000; got ${opts.every}`);
+      }
+      if (opts.cron !== undefined) parseCron(opts.cron);
+      const id = opts.id ?? name;
+      const old = (await schedules()).find((s) => s.id === id);
+      const same = old && old.every === opts.every && old.cron === opts.cron;
+      const sch: ScheduleRecord = {
+        v: SCHEMA_VERSION,
+        id,
+        task: name,
+        input: opts.input ?? null,
+        catchUp: opts.catchUp ?? "once",
+        overlap: opts.overlap ?? "skip",
+        nextRunAt: same ? old.nextRunAt : nextSlot({ ...opts, nextRunAt: 0 }, now(), false),
+        computedAt: same ? old.computedAt : now(),
+        skipped: old?.skipped ?? 0,
+      };
+      if (opts.every !== undefined) sch.every = opts.every;
+      if (opts.cron !== undefined) sch.cron = opts.cron;
+      if (old?.lastTaskId) sch.lastTaskId = old.lastTaskId;
+      if (old?.lastRunAt) sch.lastRunAt = old.lastRunAt;
+      await store.set(SCHEDULE_PREFIX + id, sch);
+      void arm();
+      return sch;
+    },
+    async unschedule(id: string) {
+      await store.remove(SCHEDULE_PREFIX + id);
+      void arm();
+    },
+    schedules,
     /** Stop the task after the current step. `ctx.signal` aborts. */
     pause: (id: string) => sendControl(id, "pause"),
     /** Stop the task for good. */
