@@ -68,7 +68,10 @@ docs/failure-modes.md  every way the code can fail, written before the code
 .github/          CI, release, PR and issue standards
 extension/        the demo extension that shows this repo working in Firefox
 scripts/build-ext.mjs  bundles extension/ into dist-ext/ with esbuild
-e2e/run.mjs       the Firefox E2E test; writes artifacts/e2e-<date>.json
+e2e/run.mjs       the Firefox E2E test of the demo; writes artifacts/e2e-<date>.json
+e2e/helper.mjs    the E2E test of `foxrunner helper`; writes artifacts/helper-<date>.json
+src/helper.ts     the helper (Node only), exported as foxrunner/helper
+src/cli.ts        the `foxrunner` command
 ```
 
 ## Commands
@@ -78,7 +81,7 @@ pnpm install
 pnpm ci:local   # lint + typecheck + test + build; run before every hand-off
 pnpm build:ext  # extension/ -> dist-ext/; fails if the manifest and package.json versions differ
 pnpm lint:ext   # web-ext lint on dist-ext/ (part of ci:local)
-pnpm e2e        # Firefox E2E; set FIREFOX if Firefox is not in the usual place
+pnpm e2e        # Firefox E2E (demo + helper); set FIREFOX if Firefox is not in the usual place
 ```
 
 ## Testing
