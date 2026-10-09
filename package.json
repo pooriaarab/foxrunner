@@ -1,6 +1,6 @@
 {
   "name": "foxrunner",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Durable agent tasks in Firefox: steps that resume, schedules, and a headless helper.",
   "type": "module",
   "license": "MIT",
