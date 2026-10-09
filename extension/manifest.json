@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "foxrunner demo",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Durable agent tasks in Firefox: steps that resume, schedules, and a headless helper.",
   "browser_specific_settings": {
     "gecko": {
