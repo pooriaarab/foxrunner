@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SCHEMA_VERSION, type TaskRecord } from "../src/index.js";
-import { setup } from "./helpers.js";
+import { flakyStore, setup } from "./helpers.js";
 
 const stored = (over: Partial<TaskRecord> = {}): TaskRecord => ({
   v: SCHEMA_VERSION,
@@ -76,6 +76,36 @@ describe("runner core", () => {
     expect(rec?.steps[0]).toMatchObject({ status: "failed", failures: 2 });
   });
 
+  it("T1 retries a step cut short by an unload", async () => {
+    const { runner, store, advance } = setup();
+    await store.set("frn:task:t1", stored());
+    const attempts: number[] = [];
+    runner.define("job", [
+      { name: "a", run: (ctx) => void attempts.push(ctx.attempt) },
+      { name: "b", run: () => "b" },
+    ]);
+    await runner.tick();
+    const rec = await runner.get("t1");
+    expect(rec?.status).toBe("queued");
+    expect(rec?.steps[0]?.failures).toBe(1);
+    expect(rec?.steps[0]?.error).toMatch(/interrupted/);
+    await advance(60_000);
+    expect(attempts).toEqual([2]);
+    expect((await runner.get("t1"))?.status).toBe("done");
+  });
+
+  it("T5 fails a step that is cut short every time", async () => {
+    const { runner, store } = setup();
+    await store.set("frn:task:t1", stored({ steps: [{ name: "a", status: "running", attempt: 3, failures: 2 }] }));
+    let ran = false;
+    runner.define("job", [{ name: "a", retry: { maxAttempts: 3 }, run: () => void (ran = true) }]);
+    await runner.tick();
+    const rec = await runner.get("t1");
+    expect(rec?.status).toBe("failed");
+    expect(rec?.error).toMatch(/interrupted/);
+    expect(ran).toBe(false);
+  });
+
   it("T6 starts one task for one id", async () => {
     const { runner } = setup();
     let runs = 0;
@@ -96,6 +126,16 @@ describe("runner core", () => {
     expect(errors.some((e) => e.includes("later"))).toBe(true);
   });
 
+  it("T8 fails a task whose step is gone from the definition", async () => {
+    const { runner, store } = setup();
+    await store.set("frn:task:t1", stored({ status: "queued", steps: [{ name: "old", status: "pending", attempt: 0, failures: 0 }] }));
+    runner.define("job", [{ name: "new", run: () => 1 }]);
+    await runner.tick();
+    const rec = await runner.get("t1");
+    expect(rec?.status).toBe("failed");
+    expect(rec?.error).toContain("old");
+  });
+
   it.each([
     ["a function", () => () => 1],
     ["too large", () => "x".repeat(100)],
@@ -108,6 +148,40 @@ describe("runner core", () => {
     const rec = await runner.get(task.id);
     expect(rec?.status).toBe("failed");
     expect(runs).toBe(1);
+  });
+
+  it("T10 runs a step once when two wakes race", async () => {
+    const { runner, store } = setup();
+    await store.set("frn:task:t1", stored({ status: "queued", steps: [{ name: "a", status: "pending", attempt: 0, failures: 0 }] }));
+    let runs = 0;
+    runner.define("job", [{ name: "a", run: async () => (runs++, await new Promise((r) => setTimeout(r, 20))) }]);
+    await Promise.all([runner.tick(), runner.tick(), runner.tick()]);
+    expect(runs).toBe(1);
+  });
+
+  it("T11 does not run a step whose start was not saved", async () => {
+    const store = flakyStore();
+    const { runner, errors } = setup({ store });
+    let runs = 0;
+    runner.define("job", [{ name: "a", run: () => void runs++ }]);
+    store.failNext((key, value) => key.startsWith("frn:task:") && (value as TaskRecord).status === "running");
+    const task = await runner.start("job", {});
+    await runner.tick();
+    expect(runs).toBe(0);
+    expect(errors.some((e) => e.includes("QuotaExceededError"))).toBe(true);
+    expect((await runner.get(task.id))?.status).toBe("queued");
+  });
+
+  it("T12 skips a corrupted record and runs the others", async () => {
+    const { runner, store, errors } = setup();
+    await store.set("frn:task:bad", { v: SCHEMA_VERSION, id: "bad", status: "weird" });
+    runner.define("job", [{ name: "a", run: () => 1 }]);
+    const task = await runner.start("job", {});
+    await runner.tick();
+    expect((await runner.get(task.id))?.status).toBe("done");
+    expect(errors.some((e) => e.includes("bad"))).toBe(true);
+    expect(await store.get("frn:task:bad")).toEqual({ v: SCHEMA_VERSION, id: "bad", status: "weird" });
+    expect((await runner.list()).map((t) => t.id)).toEqual([task.id]);
   });
 
   it("emits change and step events", async () => {
