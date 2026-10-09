@@ -78,6 +78,8 @@ tests commit before the code that makes them pass.
 | H8 | A restart gives the extension a new internal UUID, so its storage looks empty. | The helper pins the UUID from the gecko id and keeps storage when Firefox removes the temporary add-on. | `e2e/run.mjs` (restart check) |
 | H9 | The helper gets SIGINT (Ctrl-C). Puppeteer's own SIGINT handler exits with code 130 before the helper can stop. | The helper turns off puppeteer's signal handlers and owns shutdown. It closes Firefox and exits with code 0. | `e2e/helper.mjs` |
 | H10 | The helper gets SIGTERM while Firefox is still starting. | The helper waits for the start to end, closes Firefox, and exits with code 0, not 2. No Firefox is left on that profile. | `e2e/helper.mjs` |
+| H11 | The helper gets SIGTERM while Node still loads its modules, before it has a signal handler. Node's default action kills it, so it has no exit code. | The helper adds its SIGINT and SIGTERM handlers before it loads puppeteer. It prints `helper loading` when the handlers are in place. A signal before the helper starts makes it exit with code 0 and leaves no Firefox. | `e2e/helper.mjs` sends SIGTERM when it reads `helper loading` |
+| H12 | The test sends SIGTERM after a fixed wait. On a slow machine the signal comes before Firefox starts to start, so the test checks the wrong moment. | The helper logs `starting firefox` just before each launch. The test waits for that line, then sends SIGTERM. | `e2e/helper.mjs` |
 
 ## Demo extension in Firefox
 
@@ -105,3 +107,22 @@ tests commit before the code that makes them pass.
 | V2 | Two pages call `start()` with the same id at the same time. | Both get the one task. Neither throws. | `tests/runner.test.ts` |
 | V3 | A cron day field has a step, such as `*/2`, and the other day field is set. | Both day fields must match, as in Vixie cron, because the field starts with `*`. | `tests/cron.test.ts` |
 | V4 | A cron slot falls in the hour that a spring-forward clock change skips. | That day has no run. Vixie cron runs it after the change; foxrunner does not. The README lists this in Limits. | README Limits |
+
+## AMO release build and listed submission (`scripts/amo-listing.mjs`)
+
+`pnpm check:amo` reads `dist-ext/`, which is what `release.yml` signs. Each
+row is a way that the listed build or the submission can go wrong.
+
+| ID | Failure | Wanted result |
+|---|---|---|
+| AR1 | `dist-ext/` is missing, so the check reads nothing | The check stops and says to run `pnpm build:ext` |
+| AR2 | A content script in the release manifest matches `127.0.0.1`, `localhost` or `*.localhost` (a test bridge) | The check stops and names the pattern |
+| AR3 | A host permission for a local host exists only for tests | The check stops, unless `local_hosts` in the listing gives a reason for that exact pattern |
+| AR4 | A file named for tests (`e2e`, `fixture`, `test`, `spec`) is in `dist-ext/` | The check stops and names the file |
+| AR5 | `dist-ext/` came from `build-ext.mjs --e2e` | AR2 or AR4 stops it |
+| AR6 | The `local_hosts` reasons go to AMO as an unknown field | `metadata` leaves them out, as it does the privacy policy |
+| AR7 | A re-run submits a version that AMO already has as listed | `version-status` says `listed`, and the step skips web-ext sign and finishes the release |
+| AR8 | AMO has the version as unlisted | `version-status` stops and says to bump the version |
+| AR9 | The AMO version lookup fails (401, 500, network) | `version-status` stops; it never guesses `absent` |
+| AE1 | The e2e bridge (`e2e/bridge.js`, a content script on `http://127.0.0.1/*`) leaves the release build, so `pnpm e2e` cannot drive the add-on. | `node scripts/build-ext.mjs --e2e` adds the bridge to the manifest and copies it. `pnpm e2e` uses that build. |
+| AE2 | The release build keeps the bridge. Any local page could then start, pause or cancel tasks and read task state (AMO policy 6.3). | The release build has no content script, and `pnpm check:amo` stops on a local content script or an `e2e` file. |
