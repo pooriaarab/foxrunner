@@ -4,7 +4,18 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { EXIT, runHelper } from "./helper.js";
+import { EXIT } from "./exit.js";
+
+// H11: the signal handlers come first. helper.js loads puppeteer, which
+// takes about 100 ms; a SIGTERM in that time used to kill the helper with
+// no exit code. A signal before the helper exists ends it with code 0.
+let stop: (() => Promise<void>) | undefined;
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    if (stop) void stop();
+    else process.exit(EXIT.stopped);
+  });
+}
 
 const USAGE = `Usage: foxrunner helper --extension <dir> [--profile <dir>] [--headed]
        [--firefox <path>] [--max-restarts <n>] [--restart-delay <ms>]
@@ -44,6 +55,9 @@ try {
 }
 if (typeof values.extension !== "string") usage("--extension is required");
 
+console.log(`${new Date().toISOString()} helper loading`);
+const { runHelper } = await import("./helper.js");
+
 const helper = runHelper({
   extension: values.extension,
   profile: typeof values.profile === "string" ? values.profile : join(homedir(), ".foxrunner", "profile"),
@@ -52,5 +66,5 @@ const helper = runHelper({
   maxRestarts: count(values["max-restarts"] as string | undefined, "max-restarts", 5),
   restartDelayMs: count(values["restart-delay"] as string | undefined, "restart-delay", 2000),
 });
-for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => void helper.stop());
+stop = helper.stop;
 process.exitCode = await helper.done;

@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-10-09T04:18:10.084Z",
+  "startedAt": "2026-10-09T18:33:26.819Z",
   "checks": [
     {
       "name": "E1 event page unloaded and woke again",
@@ -94,13 +94,13 @@
   ],
   "firefox": "firefox/157.0.1",
   "tasks": [
-    "1559bb05 done prepare:done:1/0 slow:done:2/1 wait:done:1/0 flaky:done:3/2 finish:done:1/0",
-    "a882fb10 done prepare:done:1/0 slow:done:1/0 wait:done:1/0 flaky:done:3/2 finish:done:1/0",
-    "591c41c6 done prepare:done:1/0 slow:done:2/1 wait:done:1/0 flaky:done:3/2 finish:done:1/0",
-    "eedf1102 done prepare:done:1/0 slow:done:1/0 wait:done:1/0 flaky:done:3/2 finish:done:1/0",
-    "32b0d225 done prepare:done:1/0 slow:done:1/0 wait:done:1/0 flaky:done:3/2 finish:done:1/0",
-    "34c95a9c cancelled prepare:done:1/0 slow:done:1/0 wait:sleeping:1/0 flaky:pending:0/0 finish:pending:0/0",
-    "aaadac86 queued prepare:done:1/0 slow:done:1/0 wait:sleeping:1/0 flaky:pending:0/0 finish:pending:0/0"
+    "06e8b075 done prepare:done:1/0 slow:done:2/1 wait:done:1/0 flaky:done:3/2 finish:done:1/0",
+    "176371c3 done prepare:done:1/0 slow:done:1/0 wait:done:1/0 flaky:done:3/2 finish:done:1/0",
+    "a4cca035 done prepare:done:1/0 slow:done:2/1 wait:done:1/0 flaky:done:3/2 finish:done:1/0",
+    "18a2a8e9 done prepare:done:1/0 slow:done:1/0 wait:done:1/0 flaky:done:3/2 finish:done:1/0",
+    "2999d481 done prepare:done:1/0 slow:done:1/0 wait:done:1/0 flaky:done:3/2 finish:done:1/0",
+    "c80f00bb cancelled prepare:done:1/0 slow:done:1/0 wait:sleeping:1/0 flaky:pending:0/0 finish:pending:0/0",
+    "67b01a68 queued prepare:done:1/0 slow:done:1/0 wait:sleeping:1/0 flaky:pending:0/0 finish:pending:0/0"
   ],
   "screenshot": "artifacts/popup-2026-10-09.png",
   "passed": true

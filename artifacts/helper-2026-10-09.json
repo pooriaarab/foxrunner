@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-10-09T04:50:41.511Z",
+  "startedAt": "2026-10-09T18:35:39.800Z",
   "checks": [
     {
       "name": "no --extension exits 1",
@@ -66,15 +66,30 @@
       "expected": "",
       "actual": "",
       "ok": true
+    },
+    {
+      "name": "SIGTERM while the helper loads exits 0",
+      "expected": 0,
+      "actual": 0,
+      "ok": true
+    },
+    {
+      "name": "no Firefox left after a stop while loading",
+      "expected": "",
+      "actual": "",
+      "ok": true
     }
   ],
   "restartLog": [
-    "2026-10-09T04:50:44.961Z firefox started pid=12111 extension=moz-extension://ceb3fcee-4912-4444-8197-c7e9c724ca1c/",
-    "2026-10-09T04:50:44.984Z firefox exited",
-    "2026-10-09T04:50:44.984Z restarting in 500 ms",
-    "2026-10-09T04:50:47.413Z firefox started pid=12476 extension=moz-extension://ceb3fcee-4912-4444-8197-c7e9c724ca1c/",
-    "2026-10-09T04:50:47.429Z firefox exited",
-    "2026-10-09T04:50:47.429Z crash loop: 2 crashes in 10 minutes; giving up"
+    "2026-10-09T18:35:40.553Z helper loading",
+    "2026-10-09T18:35:41.027Z starting firefox",
+    "2026-10-09T18:35:43.336Z firefox started pid=55570 extension=moz-extension://ceb3fcee-4912-4444-8197-c7e9c724ca1c/",
+    "2026-10-09T18:35:43.359Z firefox exited",
+    "2026-10-09T18:35:43.359Z restarting in 500 ms",
+    "2026-10-09T18:35:43.861Z starting firefox",
+    "2026-10-09T18:35:46.040Z firefox started pid=56328 extension=moz-extension://ceb3fcee-4912-4444-8197-c7e9c724ca1c/",
+    "2026-10-09T18:35:46.065Z firefox exited",
+    "2026-10-09T18:35:46.066Z crash loop: 2 crashes in 10 minutes; giving up"
   ],
   "passed": true
 }
