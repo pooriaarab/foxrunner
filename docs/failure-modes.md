@@ -20,8 +20,15 @@ tests commit before the code that makes them pass.
 
 | # | Failure mode | Wanted behavior | Test |
 |---|---|---|---|
+| T1 | The event page unloads in the middle of a step. | The next wake finds the step `running` with no owner. It counts one failure, "interrupted", and retries the step. | `tests/runner.test.ts`, E2E |
+| T2 | Firefox is killed in the middle of a step. | Same as T1 when Firefox starts again with the same profile. | E2E |
 | T3 | A step runs twice after a resume. | `ctx.idempotencyKey` is the same for every attempt of a step, so step code can skip work it already did. `ctx.attempt` grows. | `tests/runner.test.ts`, E2E |
 | T4 | A step throws. | The task waits for the backoff time, then retries. After `maxAttempts` failures the task is `failed` with the last error. | `tests/runner.test.ts`, E2E |
+| T5 | A step kills the page every time it runs. | Each cut-short attempt counts as a failure, so the task fails after `maxAttempts`. It does not loop forever. | `tests/runner.test.ts` |
 | T6 | `start()` is called twice with the same task id. | One task. The step runs once. | `tests/runner.test.ts` |
 | T7 | A task name has no definition. | `start()` throws. A stored task with no definition stays `queued` and the runner emits `error`. | `tests/runner.test.ts` |
+| T8 | The definition changed and a stored step name is gone. | The task fails with an error that names the step. | `tests/runner.test.ts` |
 | T9 | A step returns a value that is not JSON, or is larger than `maxOutputBytes`. | The step fails with no retry. A retry would give the same result. | `tests/runner.test.ts` |
+| T10 | Two wakes (for example an alarm and startup) try to run the same task. | A lock lets one of them run it. The step runs once. | `tests/runner.test.ts` |
+| T11 | The write that marks a step `running` fails. | The step does not run. The runner emits `error`. | `tests/runner.test.ts` |
+| T12 | A corrupted record sits next to good records. | The runner emits `error` for it, leaves it in storage, and runs the good tasks. `list()` leaves it out. | `tests/runner.test.ts` |
