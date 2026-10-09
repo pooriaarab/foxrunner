@@ -14,10 +14,17 @@
   "engines": {
     "node": ">=24"
   },
+  "bin": {
+    "foxrunner": "dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./helper": {
+      "types": "./dist/helper.d.ts",
+      "default": "./dist/helper.js"
     }
   },
   "files": [
@@ -31,15 +38,18 @@
     "ci:local": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm build:ext && pnpm lint:ext",
     "build:ext": "node scripts/build-ext.mjs",
     "lint:ext": "web-ext lint -s dist-ext --warnings-as-errors",
-    "e2e": "pnpm build:ext && node e2e/run.mjs"
+    "e2e": "pnpm build && pnpm build:ext && node e2e/run.mjs && node e2e/helper.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.19.1",
+    "create-foxkit": "^0.1.0",
+    "esbuild": "^0.28.2",
     "oxlint": "^1.87.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3",
-    "create-foxkit": "^0.1.0",
-    "esbuild": "^0.28.2",
     "web-ext": "^10.7.0"
+  },
+  "dependencies": {
+    "puppeteer-core": "^25.12.0"
   }
 }

@@ -63,3 +63,16 @@ tests commit before the code that makes them pass.
 | Q8 | A cron slot falls at a month end, on a weekday rule, or on a day that does not exist. | The next slot is a real time that matches every field. | `tests/cron.test.ts` |
 | Q9 | The event page calls `schedule()` again on every wake. | The call keeps the planned next slot. It only plans again when the timing changes. | `tests/schedule.test.ts` |
 | Q10 | Two schedules start the same task name at the same time. | Each starts its own task with its own id. | `tests/schedule.test.ts` |
+
+## Headless helper
+
+| # | Failure mode | Wanted behavior | Test |
+|---|---|---|---|
+| H1 | The command line is wrong: no `--extension`, an unknown flag, or a bad number. | Print the usage and exit with code 1. | `e2e/helper.mjs` |
+| H2 | Firefox is not found. | Print where it looked and exit with code 2. | `e2e/helper.mjs` |
+| H3 | The extension folder has no `manifest.json` or no gecko id. | Print the problem and exit with code 2. | `e2e/helper.mjs` |
+| H4 | Firefox crashes or is killed. | Log the exit, wait, and start Firefox again with the same profile and extension. | `e2e/helper.mjs` |
+| H5 | Firefox crashes again and again. | After more than `--max-restarts` crashes in 10 minutes, stop and exit with code 3. | `e2e/helper.mjs` |
+| H6 | The helper gets SIGTERM or SIGINT. | Close Firefox and exit with code 0. | `e2e/helper.mjs` |
+| H7 | The profile folder does not exist. | Create it. | `e2e/helper.mjs` |
+| H8 | A restart gives the extension a new internal UUID, so its storage looks empty. | The helper pins the UUID from the gecko id and keeps storage when Firefox removes the temporary add-on. | `e2e/run.mjs` (restart check) |
