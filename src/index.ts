@@ -10,3 +10,14 @@ export {
   type TaskRecord,
   type TaskStatus,
 } from "./record.js";
+export {
+  createRunner,
+  type BrowserLike,
+  type RetryOptions,
+  type Runner,
+  type RunnerEvents,
+  type RunnerOptions,
+  type StepContext,
+  type StepDefinition,
+} from "./runner.js";
+export type { LocksLike } from "./lock.js";
