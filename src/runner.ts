@@ -361,12 +361,18 @@ export function createRunner(options: RunnerOptions) {
   function arm(): Promise<void> {
     arming = arming.then(async () => {
       if (!options.browser) return;
+      // Anything already due that is still here after a tick is something this
+      // page cannot run now: no definition, a lock held by another page, or a
+      // failed write. Look again after watchdogMs, never at once, or the
+      // alarm fires in a tight loop.
+      const later = now() + watchdogMs;
+      const at = (t: number) => (t <= now() ? later : t);
       let when = Infinity;
       for (const t of await list()) {
-        if (t.status === "running") when = Math.min(when, now() + watchdogMs);
-        if (t.status === "queued") when = Math.min(when, t.runAt ?? now());
+        if (t.status === "running") when = Math.min(when, later);
+        if (t.status === "queued" && !active.has(t.id)) when = Math.min(when, at(t.runAt ?? now()));
       }
-      for (const sch of await schedules()) when = Math.min(when, sch.nextRunAt);
+      for (const sch of await schedules()) when = Math.min(when, at(sch.nextRunAt));
       if (when === Infinity) await options.browser.alarms.clear(WAKE_ALARM);
       else options.browser.alarms.create(WAKE_ALARM, { when });
     }).catch((error) => emit("error", { message: `wake alarm not set: ${message(error)}` }));

@@ -86,3 +86,11 @@ tests commit before the code that makes them pass.
 | E3 | Firefox is killed while one task sleeps and another is in a step. | After a restart with the same profile, the sleeping task wakes at its time without running the sleep step again. The cut-short step runs again. Both end `done`. | `e2e/run.mjs` |
 | E4 | The extension reloads while a task sleeps. | The new event page sets the alarm again and the task ends `done`. | `e2e/run.mjs` |
 | E5 | The popup sends pause, resume and cancel. | A paused task stays paused past its wake time, then ends `done` after resume. A cancelled task stays `cancelled`. | `e2e/run.mjs` |
+
+## Wake alarm spin
+
+| # | Failure mode | Wanted behavior | Test |
+|---|---|---|---|
+| W1 | A queued task has no definition in this page, for example after an update renamed it. | The wake alarm does not fire again at once. A due item this page cannot run gets a wake `watchdogMs` later. | `tests/wake.test.ts` |
+| W2 | Another page holds the lock of a due task. | Same as W1. This page does not set the alarm to "now" again and again. | `tests/wake.test.ts` |
+| W3 | A due schedule names a task that has no definition. | Same as W1. | `tests/wake.test.ts` |
