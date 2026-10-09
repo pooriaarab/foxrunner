@@ -48,3 +48,18 @@ tests commit before the code that makes them pass.
 | C9 | The clock moves back after a sleep starts. | The runner keeps the time that was left, so the task does not wait hours too long. | `tests/control.test.ts` |
 | C10 | Alarms are lost, for example after an extension reload. | Every wake sets the alarm again from the stored tasks. | `tests/control.test.ts`, E2E |
 | C11 | The event page unloads during a step, and no alarm is set to wake it. | While a step runs, the runner keeps a watchdog alarm `watchdogMs` ahead. | `tests/control.test.ts`, E2E |
+
+## Schedules
+
+| # | Failure mode | Wanted behavior | Test |
+|---|---|---|---|
+| Q1 | `every` is shorter than one minute, or not a whole number. | `schedule()` throws a `RangeError`. Alarms are not a fast timer. | `tests/schedule.test.ts` |
+| Q2 | A cron string is wrong. | `parseCron` throws an error that names the bad field. | `tests/cron.test.ts` |
+| Q3 | Runs were missed while Firefox was closed, and `catchUp` is `"once"`. | One run at the next wake, not one run for each missed slot. | `tests/schedule.test.ts` |
+| Q4 | Runs were missed, and `catchUp` is `"skip"`. | No run. The next slot is planned. | `tests/schedule.test.ts` |
+| Q5 | The run before is still going when the next slot comes. | With `overlap: "skip"` (the default) the slot is skipped and counted. With `"allow"` a second task starts. | `tests/schedule.test.ts` |
+| Q6 | Two wakes in one page handle the same due slot. | One task. The task id comes from the schedule id and the slot time. | `tests/schedule.test.ts` |
+| Q7 | The clock moves back. | The next slot is worked out again from the new time. | `tests/schedule.test.ts` |
+| Q8 | A cron slot falls at a month end, on a weekday rule, or on a day that does not exist. | The next slot is a real time that matches every field. | `tests/cron.test.ts` |
+| Q9 | The event page calls `schedule()` again on every wake. | The call keeps the planned next slot. It only plans again when the timing changes. | `tests/schedule.test.ts` |
+| Q10 | Two schedules start the same task name at the same time. | Each starts its own task with its own id. | `tests/schedule.test.ts` |
