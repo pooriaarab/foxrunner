@@ -126,3 +126,8 @@ row is a way that the listed build or the submission can go wrong.
 | AR9 | The AMO version lookup fails (401, 500, network) | `version-status` stops; it never guesses `absent` |
 | AE1 | The e2e bridge (`e2e/bridge.js`, a content script on `http://127.0.0.1/*`) leaves the release build, so `pnpm e2e` cannot drive the add-on. | `node scripts/build-ext.mjs --e2e` adds the bridge to the manifest and copies it. `pnpm e2e` uses that build. |
 | AE2 | The release build keeps the bridge. Any local page could then start, pause or cancel tasks and read task state (AMO policy 6.3). | The release build has no content script, and `pnpm check:amo` stops on a local content script or an `e2e` file. |
+
+| ID | Failure | Wanted result |
+|---|---|---|
+| AR-U1 | A `local_hosts` reason for a host permission also clears a test content script on the same pattern | Each reason names its use (`host_permission`, `content_script`, `web_accessible_resource`, `externally_connectable`); a use without its own reason stops the check |
+| AR-U2 | `local_hosts` keeps a reason for a use that the release build does not have | The check stops and names the pattern and the use |
