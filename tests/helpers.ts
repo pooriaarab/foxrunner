@@ -6,8 +6,8 @@ type Listener = (...args: never[]) => unknown;
 export function setup(options: Partial<RunnerOptions> = {}) {
   const clock = { now: 1_000_000 };
   const alarms = new Map<string, number>();
-  const listeners: Record<string, Listener[]> = { alarm: [], startup: [], installed: [] };
-  const on = (name: string) => ({ addListener: (fn: Listener) => listeners[name]!.push(fn) });
+  const listeners = { alarm: [] as Listener[], startup: [] as Listener[], installed: [] as Listener[] };
+  const on = (name: keyof typeof listeners) => ({ addListener: (fn: Listener) => listeners[name].push(fn) });
   const browser = {
     alarms: {
       create: (name: string, info: { when: number }) => void alarms.set(name, info.when),
