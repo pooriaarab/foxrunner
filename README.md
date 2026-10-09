@@ -15,6 +15,9 @@ foxrunner has two parts:
 npm i foxrunner
 ```
 
+Install the add-on from AMO: [addons.mozilla.org/firefox/addon/foxrunner](https://addons.mozilla.org/firefox/addon/foxrunner/)
+(pending AMO review; the link works after approval).
+
 foxrunner needs Firefox 153 or later. The helper needs Node 24 or later.
 
 ## Example
@@ -178,11 +181,11 @@ npx foxrunner helper --extension ./my-extension --profile ~/.foxrunner/profile
 | `--max-restarts <n>` | `5` | Crashes allowed in 10 minutes before the helper stops |
 | `--restart-delay <ms>` | `2000` | Wait before a restart. It doubles for each recent crash, up to 60 s. |
 
-The helper logs one line per event to stdout, for example `firefox started pid=4242 extension=moz-extension://…/`.
+The helper logs one line per event to stdout: `helper loading` once, `starting firefox` before each launch, and then, for example, `firefox started pid=4242 extension=moz-extension://…/`.
 
 | Exit code | Meaning |
 |---|---|
-| 0 | Stopped by SIGINT or SIGTERM. Firefox is closed. |
+| 0 | Stopped by SIGINT or SIGTERM. Firefox is closed. A signal before `helper loading` can still end the helper with no exit code, because Node is still starting. |
 | 1 | Bad command line |
 | 2 | Cannot find Firefox, cannot read the extension, or the first start failed |
 | 3 | Crash loop: more than `--max-restarts` crashes in 10 minutes |
@@ -196,7 +199,7 @@ pnpm install
 pnpm e2e
 ```
 
-`pnpm e2e` builds the demo extension in `extension/` and runs it in a real Firefox. It writes `artifacts/e2e-<date>.json`, `artifacts/helper-<date>.json` and a popup screenshot. To try the popup yourself, run `pnpm build:ext` and load `dist-ext/manifest.json` from `about:debugging`.
+`pnpm e2e` builds the extension in `extension/` with `--e2e`, which adds a test content script on `http://127.0.0.1/*`, and runs it in a real Firefox. The release build that AMO signs does not have that script. It writes `artifacts/e2e-<date>.json`, `artifacts/helper-<date>.json` and a popup screenshot. To try the popup yourself, run `pnpm build:ext` and load `dist-ext/manifest.json` from `about:debugging`.
 
 ## Firefox APIs used
 
@@ -226,7 +229,6 @@ pnpm e2e
 - `list()` reads all of `storage.local`, so it slows down with many thousands of records.
 - The helper loads unpacked extension folders only, not `.xpi` files.
 - foxrunner does not use the `idle` API yet, so it cannot hold heavy steps until the user is away.
-- The demo's content script on `http://127.0.0.1/*` exists only for the E2E test.
 
 ## Part of the fox primitives
 

@@ -84,9 +84,10 @@ try {
   ctrlC.child.kill("SIGINT");
   check("SIGINT exits 0", 0, await ctrlC.exited);
 
-  // H10: SIGTERM while Firefox is still starting exits 0 and leaves no Firefox.
+  // H10, H12: SIGTERM while Firefox is still starting exits 0 and leaves no
+  // Firefox. The test waits for the helper's own line, not a fixed time.
   const early = helper(["--extension", "dist-ext", "--profile", profile, ...extra]);
-  await new Promise((r) => setTimeout(r, 300));
+  await early.waitFor(/starting firefox/);
   early.child.kill("SIGTERM");
   check("SIGTERM during start-up exits 0", 0, await early.exited);
   await new Promise((r) => setTimeout(r, 1000));
@@ -97,12 +98,28 @@ try {
     left = "";
   }
   check("no Firefox left on the profile", "", left);
+
+  // H11: SIGTERM while Node still loads the helper's modules exits 0. The
+  // helper prints "helper loading" once its signal handlers are in place and
+  // before it loads puppeteer (about 100 ms), and the test answers that line.
+  const loading = helper(["--extension", "dist-ext", "--profile", profile, ...extra]);
+  await loading.waitFor(/helper loading/);
+  loading.child.kill("SIGTERM");
+  check("SIGTERM while the helper loads exits 0", 0, await loading.exited);
+  await new Promise((r) => setTimeout(r, 1000));
+  let leftAfterLoad = "";
+  try {
+    leftAfterLoad = execFileSync("pgrep", ["-f", profile], { encoding: "utf8" }).trim();
+  } catch {
+    leftAfterLoad = "";
+  }
+  check("no Firefox left after a stop while loading", "", leftAfterLoad);
 } catch (error) {
   record.error = error instanceof Error ? error.message : String(error);
 } finally {
   rmSync(join(profile, ".."), { recursive: true, force: true });
 }
-record.passed = !record.error && record.checks.length === 11 && record.checks.every((c) => c.ok);
+record.passed = !record.error && record.checks.length === 13 && record.checks.every((c) => c.ok);
 const path = writeArtifact("artifacts", "helper", record);
 for (const c of record.checks) console.log(`${c.ok ? "ok " : "BAD"} ${c.name}: ${c.actual}`);
 console.log(`${record.passed ? "PASS" : "FAIL"}${record.error ? `: ${record.error}` : ""} | ${path}`);

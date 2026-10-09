@@ -1,4 +1,5 @@
-// For the E2E test only: it runs on 127.0.0.1 pages. It passes commands from
+// For the E2E test only: build-ext.mjs --e2e adds it as a content script on
+// 127.0.0.1 pages, and the release build leaves it out. It passes commands from
 // the page to the event page, and copies foxrunner's stored state into the
 // page. It reads storage directly, so it does not keep the event page loaded.
 window.addEventListener("message", async (event) => {
