@@ -90,6 +90,21 @@ describe("control", () => {
     expect(rec?.steps[0]?.output).toEqual({ answer: "yes" });
   });
 
+  it("V1 keeps the reply when a paused waiting task is resumed", async () => {
+    const { runner } = setup();
+    runner.define("job", [{ name: "ask", run: (ctx) => (ctx.reply === undefined ? ctx.waitForInput("code?") : { code: ctx.reply }) }]);
+    const task = await runner.start("job");
+    await runner.tick();
+    await runner.pause(task.id);
+    await runner.tick();
+    expect((await runner.get(task.id))?.status).toBe("paused");
+    await runner.resume(task.id, "4242");
+    await runner.tick();
+    const rec = await runner.get(task.id);
+    expect(rec?.status).toBe("done");
+    expect(rec?.steps[0]?.output).toEqual({ code: "4242" });
+  });
+
   it("C5 leaves a finished task alone and rejects an unknown id", async () => {
     const { runner } = setup();
     runner.define("job", [{ name: "a", run: () => 1 }]);

@@ -42,4 +42,10 @@ describe("cron", () => {
   it("Q8 matches either day field when both are set", () => {
     expect(next("0 0 15 * 1", at(2026, 1, 1))).toEqual(new Date(at(2026, 1, 5)));
   });
+
+  it("V3 needs both day fields when one starts with *", () => {
+    // */2 is the odd days. The first odd Tuesday of 2026 is the 13th (the 6th is even).
+    // With OR, the next slot would be the 3rd, an odd Saturday.
+    expect(next("0 0 */2 * 2", at(2026, 1, 1))).toEqual(new Date(at(2026, 1, 13)));
+  });
 });
