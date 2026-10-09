@@ -12,7 +12,7 @@ browser.storage.local.get("demo:boots").then(({ "demo:boots": boots = [] }) =>
   browser.storage.local.set({ "demo:boots": [...boots, Date.now()].slice(-50) }),
 );
 
-runner.define("demo", [
+runner.define("sample", [
   { name: "prepare", run: (ctx) => ({ input: ctx.input }) },
   {
     // The side effect runs once per idempotency key. Each attempt also notes
@@ -46,7 +46,7 @@ runner.define("demo", [
 browser.runtime.onMessage.addListener((msg) => {
   switch (msg?.type) {
     case "start":
-      return runner.start("demo", msg.input ?? {});
+      return runner.start("sample", msg.input ?? {});
     case "list":
       return runner.list();
     case "pause":

@@ -7,7 +7,9 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { delimiter, join, resolve } from "node:path";
 import puppeteer, { type Browser } from "puppeteer-core";
 
-export const EXIT = { stopped: 0, usage: 1, setup: 2, crashLoop: 3 } as const;
+import { EXIT } from "./exit.js";
+
+export { EXIT };
 
 export class SetupError extends Error {}
 
@@ -125,6 +127,8 @@ export function runHelper(options: HelperOptions) {
   const done = (async (): Promise<number> => {
     for (let first = true; ; first = false) {
       try {
+        // H12: tells a caller (and the E2E test) that a launch is under way.
+        log("starting firefox");
         current = await launchFirefox(options);
         if (stopping) {
           // stop() came while Firefox was starting.
