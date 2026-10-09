@@ -26,6 +26,21 @@ export interface StepContext {
   attempt: number;
   /** The same for every attempt of this step in this task. */
   idempotencyKey: string;
+  /** Aborts when the user pauses or cancels the task. */
+  signal: AbortSignal;
+  /** The value given to `resume(id, reply)` after `waitForInput`. */
+  reply: unknown;
+  /** Return this to end the step and run the next one after ms. An alarm wakes the page. */
+  sleep(ms: number): Sleep;
+  /** Return this to park the task in `waiting` until `resume(id, reply)`. */
+  waitForInput(prompt: unknown): WaitForInput;
+}
+
+export class Sleep {
+  constructor(readonly ms: number) {}
+}
+export class WaitForInput {
+  constructor(readonly prompt: unknown) {}
 }
 
 export interface StepDefinition {
@@ -58,6 +73,8 @@ export interface RunnerOptions {
   retry?: RetryOptions;
   /** Largest step output, as JSON characters. Default 1000000. */
   maxOutputBytes?: number;
+  /** While a step runs, keep a wake alarm this far ahead, so an unload mid-step gets a wake. Default 30000. */
+  watchdogMs?: number;
   /** Check stored tasks once, right after createRunner. Default true. */
   autoTick?: boolean;
 }
@@ -69,6 +86,9 @@ export interface RunnerEvents {
 }
 
 export const TASK_PREFIX = "frn:task:";
+export const CONTROL_PREFIX = "frn:ctl:";
+export const WAKE_ALARM = "frn:wake";
+const TERMINAL = new Set(["done", "failed", "cancelled"]);
 const INTERRUPTED = "interrupted: the page unloaded or the browser stopped during this step";
 
 class PermanentError extends Error {}
@@ -83,6 +103,9 @@ export function createRunner(options: RunnerOptions) {
   const definitions = new Map<string, StepDefinition[]>();
   const listeners = new Map<keyof RunnerEvents, Set<(event: never) => void>>();
   const active = new Map<string, Promise<void>>();
+  const controllers = new Map<string, AbortController>();
+  const watchdogMs = options.watchdogMs ?? 30_000;
+  let arming = Promise.resolve();
 
   function emit<K extends keyof RunnerEvents>(name: K, event: RunnerEvents[K]) {
     for (const fn of listeners.get(name) ?? []) (fn as (e: RunnerEvents[K]) => void)(event);
@@ -143,6 +166,17 @@ export function createRunner(options: RunnerOptions) {
     const task = await load(id);
     if (!task) return false;
     const def = definitions.get(task.name);
+    const control = await store.get(CONTROL_PREFIX + id);
+    if (control === "pause" || control === "cancel") {
+      if (!TERMINAL.has(task.status)) {
+        for (const s of task.steps) if (s.status === "running") s.status = "pending";
+        task.status = control === "pause" ? "paused" : "cancelled";
+        if (control === "cancel") delete task.runAt;
+        await save(task);
+      }
+      await store.remove(CONTROL_PREFIX + id);
+      return false;
+    }
     if (task.status === "running") {
       const cut = task.steps.find((s) => s.status === "running");
       if (!cut) throw new Error(`task ${id} is running but has no running step`);
@@ -151,7 +185,14 @@ export function createRunner(options: RunnerOptions) {
       emit("step", { task: structuredClone(task), step: structuredClone(cut) });
       return true;
     }
-    if (task.status !== "queued" || (task.runAt ?? 0) > now()) return false;
+    if (task.status !== "queued") return false;
+    if (task.runAt !== undefined && task.scheduledAt !== undefined && now() < task.scheduledAt) {
+      // The clock moved back. Keep the time that was left.
+      task.runAt = now() + (task.runAt - task.scheduledAt);
+      task.scheduledAt = now();
+      await save(task);
+    }
+    if ((task.runAt ?? 0) > now()) return false;
     const step = task.steps.find((s) => s.status !== "done");
     if (!step) {
       task.status = "done";
@@ -162,6 +203,13 @@ export function createRunner(options: RunnerOptions) {
     if (!def) {
       emit("error", { id, message: `task ${id} waits: no definition for task name ${task.name}` });
       return false;
+    }
+    if (step.status === "sleeping") {
+      step.status = "done";
+      step.endedAt = now();
+      delete task.runAt;
+      await save(task);
+      return true;
     }
     const stepDef = def.find((s) => s.name === step.name);
     if (!stepDef) {
@@ -181,17 +229,52 @@ export function createRunner(options: RunnerOptions) {
       emit("error", { id, message: `task ${id} not started: ${message(error)}` });
       return false;
     }
+    void arm();
     const results = Object.fromEntries(task.steps.filter((s) => s.status === "done").map((s) => [s.name, s.output]));
-    const ctx: StepContext = { taskId: id, input: task.input, results, attempt: step.attempt, idempotencyKey: `${id}:${step.name}` };
+    const controller = new AbortController();
+    controllers.set(id, controller);
+    // pause() writes the signal, then looks for the controller. Here the order
+    // is the other way, so one of the two always sees the other.
+    if (await store.get(CONTROL_PREFIX + id)) controller.abort("control");
+    const ctx: StepContext = {
+      taskId: id,
+      input: task.input,
+      results,
+      attempt: step.attempt,
+      idempotencyKey: `${id}:${step.name}`,
+      signal: controller.signal,
+      reply: step.reply,
+      sleep: (ms) => new Sleep(ms),
+      waitForInput: (prompt) => new WaitForInput(prompt),
+    };
     try {
       const output = await stepDef.run(ctx);
-      checkOutput(output);
-      step.status = "done";
-      step.output = output;
-      step.endedAt = now();
       task.status = "queued";
+      if (output instanceof Sleep) {
+        step.status = "sleeping";
+        step.wakeAt = now() + output.ms;
+        task.runAt = step.wakeAt;
+        task.scheduledAt = now();
+      } else if (output instanceof WaitForInput) {
+        step.status = "waiting";
+        task.status = "waiting";
+        task.prompt = output.prompt;
+      } else {
+        checkOutput(output);
+        step.status = "done";
+        step.output = output;
+        step.endedAt = now();
+      }
     } catch (error) {
-      fail(task, step, message(error), error instanceof PermanentError, def);
+      if (await store.get(CONTROL_PREFIX + id)) {
+        // The user paused or cancelled; the abort is not the step's fault.
+        step.status = "pending";
+        task.status = "queued";
+      } else {
+        fail(task, step, message(error), error instanceof PermanentError, def);
+      }
+    } finally {
+      controllers.delete(id);
     }
     try {
       await save(task);
@@ -212,7 +295,10 @@ export function createRunner(options: RunnerOptions) {
     })
       .then(() => undefined)
       .catch((error) => emit("error", { id, message: message(error) }))
-      .finally(() => active.delete(id));
+      .finally(() => {
+        active.delete(id);
+        void arm();
+      });
     active.set(id, work);
     return work;
   }
@@ -227,10 +313,35 @@ export function createRunner(options: RunnerOptions) {
     return tasks.toSorted((a, b) => b.createdAt - a.createdAt);
   }
 
+  /** Set one wake alarm for the earliest moment a stored task needs the page. */
+  function arm(): Promise<void> {
+    arming = arming.then(async () => {
+      if (!options.browser) return;
+      let when = Infinity;
+      for (const t of await list()) {
+        if (t.status === "running") when = Math.min(when, now() + watchdogMs);
+        if (t.status === "queued") when = Math.min(when, t.runAt ?? now());
+      }
+      if (when === Infinity) await options.browser.alarms.clear(WAKE_ALARM);
+      else options.browser.alarms.create(WAKE_ALARM, { when });
+    }).catch((error) => emit("error", { message: `wake alarm not set: ${message(error)}` }));
+    return arming;
+  }
+
+  async function sendControl(id: string, signal: "pause" | "cancel") {
+    const task = await load(id);
+    if (!task) throw new Error(`no task with id ${id}`);
+    if (TERMINAL.has(task.status)) return;
+    await store.set(CONTROL_PREFIX + id, signal);
+    controllers.get(id)?.abort(signal);
+    void drive(id);
+  }
+
   async function tick() {
     const tasks = await list();
     await Promise.all(tasks.filter((t) => t.status === "running" || t.status === "queued").map((t) => drive(t.id)));
     await Promise.all(active.values());
+    await arm();
   }
 
   const runner = {
@@ -269,6 +380,30 @@ export function createRunner(options: RunnerOptions) {
       return task;
     },
     get: load,
+    /** Stop the task after the current step. `ctx.signal` aborts. */
+    pause: (id: string) => sendControl(id, "pause"),
+    /** Stop the task for good. */
+    cancel: (id: string) => sendControl(id, "cancel"),
+    /** Go on with a paused task, or answer a waiting one. */
+    async resume(id: string, reply?: unknown) {
+      const done = await lock(`foxrunner:task:${id}`, async () => {
+        const task = await load(id);
+        if (!task) throw new Error(`no task with id ${id}`);
+        if (task.status === "paused") task.status = "queued";
+        else if (task.status === "waiting") {
+          const step = task.steps.find((s) => s.status === "waiting");
+          if (step) {
+            step.status = "pending";
+            step.reply = reply;
+          }
+          delete task.prompt;
+          task.status = "queued";
+        } else return;
+        await store.remove(CONTROL_PREFIX + id);
+        await save(task);
+      });
+      if (done.ran) void drive(id);
+    },
     list,
     /** Run every due task and wait for the work in this page to finish. */
     tick,
@@ -280,6 +415,13 @@ export function createRunner(options: RunnerOptions) {
     },
   };
 
+  // Listeners must be added in the first turn of the event page, so Firefox
+  // starts the page for these events.
+  options.browser?.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === WAKE_ALARM) void tick();
+  });
+  options.browser?.runtime.onStartup.addListener(() => void tick());
+  options.browser?.runtime.onInstalled.addListener(() => void tick());
   if (options.autoTick ?? true) setTimeout(() => void tick(), 0);
   return runner;
 }
