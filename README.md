@@ -181,11 +181,11 @@ npx foxrunner helper --extension ./my-extension --profile ~/.foxrunner/profile
 | `--max-restarts <n>` | `5` | Crashes allowed in 10 minutes before the helper stops |
 | `--restart-delay <ms>` | `2000` | Wait before a restart. It doubles for each recent crash, up to 60 s. |
 
-The helper logs one line per event to stdout, for example `firefox started pid=4242 extension=moz-extension://…/`.
+The helper logs one line per event to stdout: `helper loading` once, `starting firefox` before each launch, and then, for example, `firefox started pid=4242 extension=moz-extension://…/`.
 
 | Exit code | Meaning |
 |---|---|
-| 0 | Stopped by SIGINT or SIGTERM. Firefox is closed. |
+| 0 | Stopped by SIGINT or SIGTERM. Firefox is closed. A signal before `helper loading` can still end the helper with no exit code, because Node is still starting. |
 | 1 | Bad command line |
 | 2 | Cannot find Firefox, cannot read the extension, or the first start failed |
 | 3 | Crash loop: more than `--max-restarts` crashes in 10 minutes |

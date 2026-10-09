@@ -101,7 +101,7 @@ try {
 
   // H11: SIGTERM while Node still loads the helper's modules exits 0. The
   // helper prints "helper loading" once its signal handlers are in place and
-  // before it loads puppeteer (about 150 ms), and the test answers that line.
+  // before it loads puppeteer (about 100 ms), and the test answers that line.
   const loading = helper(["--extension", "dist-ext", "--profile", profile, ...extra]);
   await loading.waitFor(/helper loading/);
   loading.child.kill("SIGTERM");
