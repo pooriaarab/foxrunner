@@ -1,4 +1,4 @@
-import { createRunner, memoryStore, type RunnerOptions } from "../src/index.js";
+import { createRunner, memoryStore, type RunnerOptions, type Store } from "../src/index.js";
 
 type Listener = (...args: never[]) => unknown;
 
@@ -25,4 +25,21 @@ export function setup(options: Partial<RunnerOptions> = {}) {
     await runner.tick();
   };
   return { runner, store, clock, alarms, listeners, errors, advance };
+}
+
+/** A store whose next write fails once. */
+export function flakyStore(): Store & { failNext: (match: (key: string, value: unknown) => boolean) => void } {
+  const inner = memoryStore();
+  let match: ((key: string, value: unknown) => boolean) | undefined;
+  return {
+    ...inner,
+    async set(key, value) {
+      if (match?.(key, value)) {
+        match = undefined;
+        throw new Error("QuotaExceededError: the store is full");
+      }
+      await inner.set(key, value);
+    },
+    failNext: (fn) => void (match = fn),
+  };
 }
