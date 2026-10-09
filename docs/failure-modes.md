@@ -76,3 +76,13 @@ tests commit before the code that makes them pass.
 | H6 | The helper gets SIGTERM or SIGINT. | Close Firefox and exit with code 0. | `e2e/helper.mjs` |
 | H7 | The profile folder does not exist. | Create it. | `e2e/helper.mjs` |
 | H8 | A restart gives the extension a new internal UUID, so its storage looks empty. | The helper pins the UUID from the gecko id and keeps storage when Firefox removes the temporary add-on. | `e2e/run.mjs` (restart check) |
+
+## Demo extension in Firefox
+
+| # | Failure mode | Wanted behavior | Test |
+|---|---|---|---|
+| E1 | The event page unloads for real in the middle of a step (idle timeout). | The watchdog alarm starts a new event page. The step runs again as attempt 2, and the idempotency ledger has one entry. | `e2e/run.mjs` |
+| E2 | A step fails twice, then works. | The task waits for the backoff each time and ends `done`. The step shows 3 attempts and 2 failures. | `e2e/run.mjs` |
+| E3 | Firefox is killed while one task sleeps and another is in a step. | After a restart with the same profile, the sleeping task wakes at its time without running the sleep step again. The cut-short step runs again. Both end `done`. | `e2e/run.mjs` |
+| E4 | The extension reloads while a task sleeps. | The new event page sets the alarm again and the task ends `done`. | `e2e/run.mjs` |
+| E5 | The popup sends pause, resume and cancel. | A paused task stays paused past its wake time, then ends `done` after resume. A cancelled task stays `cancelled`. | `e2e/run.mjs` |
