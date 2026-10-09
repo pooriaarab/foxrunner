@@ -96,3 +96,12 @@ tests commit before the code that makes them pass.
 | W1 | A queued task has no definition in this page, for example after an update renamed it. | The wake alarm does not fire again at once. A due item this page cannot run gets a wake `watchdogMs` later. | `tests/wake.test.ts` |
 | W2 | Another page holds the lock of a due task. | Same as W1. This page does not set the alarm to "now" again and again. | `tests/wake.test.ts` |
 | W3 | A due schedule names a task that has no definition. | Same as W1. | `tests/wake.test.ts` |
+
+## Review fixes
+
+| # | Failure mode | Wanted behavior | Test |
+|---|---|---|---|
+| V1 | A waiting task is paused, then resumed with a reply. | The step runs again with `ctx.reply` set to that reply. | `tests/control.test.ts` |
+| V2 | Two pages call `start()` with the same id at the same time. | Both get the one task. Neither throws. | `tests/runner.test.ts` |
+| V3 | A cron day field has a step, such as `*/2`, and the other day field is set. | Both day fields must match, as in Vixie cron, because the field starts with `*`. | `tests/cron.test.ts` |
+| V4 | A cron slot falls in the hour that a spring-forward clock change skips. | That day has no run. Vixie cron runs it after the change; foxrunner does not. The README lists this in Limits. | README Limits |
