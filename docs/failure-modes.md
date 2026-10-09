@@ -76,6 +76,8 @@ tests commit before the code that makes them pass.
 | H6 | The helper gets SIGTERM or SIGINT. | Close Firefox and exit with code 0. | `e2e/helper.mjs` |
 | H7 | The profile folder does not exist. | Create it. | `e2e/helper.mjs` |
 | H8 | A restart gives the extension a new internal UUID, so its storage looks empty. | The helper pins the UUID from the gecko id and keeps storage when Firefox removes the temporary add-on. | `e2e/run.mjs` (restart check) |
+| H9 | The helper gets SIGINT (Ctrl-C). Puppeteer's own SIGINT handler exits with code 130 before the helper can stop. | The helper turns off puppeteer's signal handlers and owns shutdown. It closes Firefox and exits with code 0. | `e2e/helper.mjs` |
+| H10 | The helper gets SIGTERM while Firefox is still starting. | The helper waits for the start to end, closes Firefox, and exits with code 0, not 2. No Firefox is left on that profile. | `e2e/helper.mjs` |
 
 ## Demo extension in Firefox
 

@@ -1,8 +1,9 @@
 // E2E test of `foxrunner helper`: start it with the demo extension, kill its
 // Firefox and check that it starts Firefox again, then check the crash-loop
-// stop, a clean SIGTERM stop and the setup errors.
+// stop, clean SIGTERM and SIGINT stops, a stop during start-up and the
+// setup errors.
 // Writes artifacts/helper-<date>.json. Env: FIREFOX (the Firefox binary).
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -76,12 +77,32 @@ try {
     alive = false;
   }
   check("SIGTERM closed Firefox", false, alive);
+
+  // H9: SIGINT exits 0 too (puppeteer's own handler used to exit 130).
+  const ctrlC = helper(["--extension", "dist-ext", "--profile", profile, ...extra]);
+  await ctrlC.waitFor(/firefox started pid=\d+/);
+  ctrlC.child.kill("SIGINT");
+  check("SIGINT exits 0", 0, await ctrlC.exited);
+
+  // H10: SIGTERM while Firefox is still starting exits 0 and leaves no Firefox.
+  const early = helper(["--extension", "dist-ext", "--profile", profile, ...extra]);
+  await new Promise((r) => setTimeout(r, 300));
+  early.child.kill("SIGTERM");
+  check("SIGTERM during start-up exits 0", 0, await early.exited);
+  await new Promise((r) => setTimeout(r, 1000));
+  let left = "";
+  try {
+    left = execFileSync("pgrep", ["-f", profile], { encoding: "utf8" }).trim();
+  } catch {
+    left = "";
+  }
+  check("no Firefox left on the profile", "", left);
 } catch (error) {
   record.error = error instanceof Error ? error.message : String(error);
 } finally {
   rmSync(join(profile, ".."), { recursive: true, force: true });
 }
-record.passed = !record.error && record.checks.length === 8 && record.checks.every((c) => c.ok);
+record.passed = !record.error && record.checks.length === 11 && record.checks.every((c) => c.ok);
 const path = writeArtifact("artifacts", "helper", record);
 for (const c of record.checks) console.log(`${c.ok ? "ok " : "BAD"} ${c.name}: ${c.actual}`);
 console.log(`${record.passed ? "PASS" : "FAIL"}${record.error ? `: ${record.error}` : ""} | ${path}`);
