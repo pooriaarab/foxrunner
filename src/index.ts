@@ -12,6 +12,8 @@ export {
 } from "./record.js";
 export {
   createRunner,
+  Sleep,
+  WaitForInput,
   type BrowserLike,
   type RetryOptions,
   type Runner,
