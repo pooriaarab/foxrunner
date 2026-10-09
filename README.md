@@ -199,7 +199,7 @@ pnpm install
 pnpm e2e
 ```
 
-`pnpm e2e` builds the demo extension in `extension/` and runs it in a real Firefox. It writes `artifacts/e2e-<date>.json`, `artifacts/helper-<date>.json` and a popup screenshot. To try the popup yourself, run `pnpm build:ext` and load `dist-ext/manifest.json` from `about:debugging`.
+`pnpm e2e` builds the extension in `extension/` with `--e2e`, which adds a test content script on `http://127.0.0.1/*`, and runs it in a real Firefox. The release build that AMO signs does not have that script. It writes `artifacts/e2e-<date>.json`, `artifacts/helper-<date>.json` and a popup screenshot. To try the popup yourself, run `pnpm build:ext` and load `dist-ext/manifest.json` from `about:debugging`.
 
 ## Firefox APIs used
 
@@ -229,7 +229,6 @@ pnpm e2e
 - `list()` reads all of `storage.local`, so it slows down with many thousands of records.
 - The helper loads unpacked extension folders only, not `.xpi` files.
 - foxrunner does not use the `idle` API yet, so it cannot hold heavy steps until the user is away.
-- The demo's content script on `http://127.0.0.1/*` exists only for the E2E test.
 
 ## Part of the fox primitives
 

@@ -21,11 +21,5 @@
     "default_icon": { "48": "icons/icon-48.png", "96": "icons/icon-96.png" },
     "default_title": "foxrunner",
     "default_popup": "popup.html"
-  },
-  "content_scripts": [
-    {
-      "matches": ["http://127.0.0.1/*"],
-      "js": ["e2e-bridge.js"]
-    }
-  ]
+  }
 }

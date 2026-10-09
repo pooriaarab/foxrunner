@@ -39,7 +39,7 @@
     "build:ext": "node scripts/build-ext.mjs",
     "lint:ext": "web-ext lint -s dist-ext --warnings-as-errors",
     "check:amo": "node scripts/amo-listing.mjs check",
-    "e2e": "pnpm build && pnpm build:ext && node e2e/run.mjs && node e2e/helper.mjs"
+    "e2e": "pnpm build && node scripts/build-ext.mjs --e2e && node e2e/run.mjs && node e2e/helper.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.19.1",
