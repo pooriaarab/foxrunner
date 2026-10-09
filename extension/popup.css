@@ -1,0 +1,20 @@
+:root { color-scheme: light dark; font: 13px/1.4 system-ui, sans-serif; }
+body { width: 380px; margin: 0; padding: 12px; }
+header { display: flex; align-items: center; justify-content: space-between; }
+h1 { font-size: 16px; margin: 0; }
+.hint { color: GrayText; margin: 8px 0 12px; }
+ul { list-style: none; margin: 0; padding: 0; }
+#tasks > li { border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+.top { display: flex; align-items: center; gap: 6px; }
+.id { font-family: ui-monospace, monospace; color: GrayText; }
+.badge { margin-left: auto; padding: 1px 8px; border-radius: 10px; font-size: 12px; background: color-mix(in srgb, currentColor 12%, transparent); }
+.badge.done { background: #1a7f37; color: white; }
+.badge.failed { background: #cf222e; color: white; }
+.badge.paused, .badge.waiting { background: #9a6700; color: white; }
+.badge.running, .badge.queued { background: #0969da; color: white; }
+.steps li { display: flex; gap: 6px; padding: 1px 0; }
+.steps .name { width: 64px; }
+.steps .meta { color: GrayText; }
+.error { color: #cf222e; }
+.actions { display: flex; gap: 6px; margin-top: 6px; }
+button { font: inherit; padding: 2px 10px; }

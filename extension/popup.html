@@ -3,12 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <title>foxrunner demo</title>
+    <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <h1>foxrunner</h1>
-    <p>Durable agent tasks in Firefox: steps that resume, schedules, and a headless helper.</p>
-    <!-- Show foxrunner working here. The E2E test reads #value. -->
-    <p>Status: <output id="value"></output></p>
+    <header>
+      <h1>foxrunner</h1>
+      <button id="start" type="button">Start demo task</button>
+    </header>
+    <p class="hint">The demo task waits 2 minutes, and one step fails twice before it works. Close this popup: the task goes on.</p>
+    <ul id="tasks"></ul>
     <script src="popup.js"></script>
   </body>
 </html>
