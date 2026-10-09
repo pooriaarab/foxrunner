@@ -32,3 +32,19 @@ tests commit before the code that makes them pass.
 | T10 | Two wakes (for example an alarm and startup) try to run the same task. | A lock lets one of them run it. The step runs once. | `tests/runner.test.ts` |
 | T11 | The write that marks a step `running` fails. | The step does not run. The runner emits `error`. | `tests/runner.test.ts` |
 | T12 | A corrupted record sits next to good records. | The runner emits `error` for it, leaves it in storage, and runs the good tasks. `list()` leaves it out. | `tests/runner.test.ts` |
+
+## Pause, cancel, sleep and wake
+
+| # | Failure mode | Wanted behavior | Test |
+|---|---|---|---|
+| C1 | The user pauses a task during a step. | `ctx.signal` aborts. The task becomes `paused` and runs no more steps. An error caused by the abort does not count as a failure. | `tests/control.test.ts`, E2E |
+| C2 | The user cancels a task while it sleeps. | The task becomes `cancelled`. It stays cancelled when the wake time comes. | `tests/control.test.ts`, E2E |
+| C3 | The user resumes a paused task. | It goes on from the step where it stopped. | `tests/control.test.ts`, E2E |
+| C4 | A step needs a person to answer. | The task parks in `waiting` with the question. `resume(id, reply)` runs the step again with `ctx.reply`. | `tests/control.test.ts` |
+| C5 | Pause, resume or cancel targets a finished task or an unknown id. | A finished task does not change. An unknown id throws. | `tests/control.test.ts` |
+| C6 | A step must wait longer than the event page lives (for example 2 minutes). | The step returns `ctx.sleep(ms)`. The runner saves the wake time and sets an alarm. It does not hold a timer. | `tests/control.test.ts`, E2E |
+| C7 | An alarm fires early. | Nothing runs early. The runner sets the alarm again for the saved time. | `tests/control.test.ts` |
+| C8 | An alarm fires late, for example after the computer slept. | The task runs on that wake. | `tests/control.test.ts` |
+| C9 | The clock moves back after a sleep starts. | The runner keeps the time that was left, so the task does not wait hours too long. | `tests/control.test.ts` |
+| C10 | Alarms are lost, for example after an extension reload. | Every wake sets the alarm again from the stored tasks. | `tests/control.test.ts`, E2E |
+| C11 | The event page unloads during a step, and no alarm is set to wake it. | While a step runs, the runner keeps a watchdog alarm `watchdogMs` ahead. | `tests/control.test.ts`, E2E |
