@@ -75,6 +75,11 @@ export async function launchFirefox(options: LaunchOptions): Promise<Launched> {
     headless: options.headless ?? true,
     userDataDir: resolve(options.profile),
     defaultViewport: null,
+    // Puppeteer's own handlers exit the process (SIGINT with code 130). The
+    // caller owns shutdown instead.
+    handleSIGINT: false,
+    handleSIGTERM: false,
+    handleSIGHUP: false,
     extraPrefsFirefox: {
       ...options.prefs,
       "extensions.webextensions.uuids": JSON.stringify({ [id]: uuid }),
@@ -121,7 +126,13 @@ export function runHelper(options: HelperOptions) {
     for (let first = true; ; first = false) {
       try {
         current = await launchFirefox(options);
+        if (stopping) {
+          // stop() came while Firefox was starting.
+          await current.browser.close().catch(() => {});
+          return EXIT.stopped;
+        }
       } catch (error) {
+        if (stopping) return EXIT.stopped;
         const text = error instanceof Error ? error.message : String(error);
         if (first || error instanceof SetupError) {
           log(`cannot start: ${text}`);
