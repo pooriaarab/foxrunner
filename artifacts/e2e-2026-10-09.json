@@ -1,0 +1,107 @@
+{
+  "startedAt": "2026-10-09T04:18:10.084Z",
+  "checks": [
+    {
+      "name": "E1 event page unloaded and woke again",
+      "expected": true,
+      "actual": true,
+      "ok": true
+    },
+    {
+      "name": "E1 slow step ran twice",
+      "expected": 2,
+      "actual": 2,
+      "ok": true
+    },
+    {
+      "name": "E1 first attempt counted as one failure",
+      "expected": 1,
+      "actual": 1,
+      "ok": true
+    },
+    {
+      "name": "E1 both attempts saw one idempotency key, one side effect",
+      "expected": "1:[1,2]",
+      "actual": "1:[1,2]",
+      "ok": true
+    },
+    {
+      "name": "E2 flaky step took 3 attempts",
+      "expected": 3,
+      "actual": 3,
+      "ok": true
+    },
+    {
+      "name": "E2 flaky step failed twice",
+      "expected": 2,
+      "actual": 2,
+      "ok": true
+    },
+    {
+      "name": "E3 sleeping task did not rerun its sleep step",
+      "expected": 1,
+      "actual": 1,
+      "ok": true
+    },
+    {
+      "name": "E3 sleeping task woke after its wake time",
+      "expected": true,
+      "actual": true,
+      "ok": true
+    },
+    {
+      "name": "E3 cut-short step ran again after restart",
+      "expected": 2,
+      "actual": 2,
+      "ok": true
+    },
+    {
+      "name": "E3 both attempts saw one idempotency key, one side effect",
+      "expected": "1:[1,2]",
+      "actual": "1:[1,2]",
+      "ok": true
+    },
+    {
+      "name": "E4 reload started a new event page",
+      "expected": true,
+      "actual": true,
+      "ok": true
+    },
+    {
+      "name": "E4 task finished after reload",
+      "expected": "done",
+      "actual": "done",
+      "ok": true
+    },
+    {
+      "name": "E5 paused task stays paused past its wake time",
+      "expected": "paused",
+      "actual": "paused",
+      "ok": true
+    },
+    {
+      "name": "E5 cancelled task is cancelled",
+      "expected": "cancelled",
+      "actual": "cancelled",
+      "ok": true
+    },
+    {
+      "name": "E5 resumed task finished",
+      "expected": "done",
+      "actual": "done",
+      "ok": true
+    }
+  ],
+  "firefox": "firefox/157.0.1",
+  "tasks": [
+    "1559bb05 done prepare:done:1/0 slow:done:2/1 wait:done:1/0 flaky:done:3/2 finish:done:1/0",
+    "a882fb10 done prepare:done:1/0 slow:done:1/0 wait:done:1/0 flaky:done:3/2 finish:done:1/0",
+    "591c41c6 done prepare:done:1/0 slow:done:2/1 wait:done:1/0 flaky:done:3/2 finish:done:1/0",
+    "eedf1102 done prepare:done:1/0 slow:done:1/0 wait:done:1/0 flaky:done:3/2 finish:done:1/0",
+    "32b0d225 done prepare:done:1/0 slow:done:1/0 wait:done:1/0 flaky:done:3/2 finish:done:1/0",
+    "34c95a9c cancelled prepare:done:1/0 slow:done:1/0 wait:sleeping:1/0 flaky:pending:0/0 finish:pending:0/0",
+    "aaadac86 queued prepare:done:1/0 slow:done:1/0 wait:sleeping:1/0 flaky:pending:0/0 finish:pending:0/0"
+  ],
+  "screenshot": "artifacts/popup-2026-10-09.png",
+  "passed": true
+}

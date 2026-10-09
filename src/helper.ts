@@ -49,6 +49,8 @@ export interface LaunchOptions {
   profile: string;
   headless?: boolean;
   firefox?: string;
+  /** More Firefox preferences, for example a shorter event page idle timeout in a test. */
+  prefs?: Record<string, unknown>;
 }
 
 export interface Launched {
@@ -74,6 +76,7 @@ export async function launchFirefox(options: LaunchOptions): Promise<Launched> {
     userDataDir: resolve(options.profile),
     defaultViewport: null,
     extraPrefsFirefox: {
+      ...options.prefs,
       "extensions.webextensions.uuids": JSON.stringify({ [id]: uuid }),
       // Firefox removes a temporary add-on when it quits. Keep its storage and UUID.
       "extensions.webextensions.keepStorageOnUninstall": true,

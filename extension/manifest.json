@@ -12,7 +12,7 @@
       }
     }
   },
-  "permissions": ["storage"],
+  "permissions": ["storage", "alarms"],
   "background": {
     "scripts": ["background.js"]
   },
@@ -23,7 +23,7 @@
   "content_scripts": [
     {
       "matches": ["http://127.0.0.1/*"],
-      "js": ["content.js"]
+      "js": ["e2e-bridge.js"]
     }
   ]
 }
