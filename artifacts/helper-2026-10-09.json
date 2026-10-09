@@ -1,0 +1,80 @@
+{
+  "startedAt": "2026-10-09T04:50:41.511Z",
+  "checks": [
+    {
+      "name": "no --extension exits 1",
+      "expected": 1,
+      "actual": 1,
+      "ok": true
+    },
+    {
+      "name": "unknown flag exits 1",
+      "expected": 1,
+      "actual": 1,
+      "ok": true
+    },
+    {
+      "name": "missing Firefox exits 2",
+      "expected": 2,
+      "actual": 2,
+      "ok": true
+    },
+    {
+      "name": "folder without manifest exits 2",
+      "expected": 2,
+      "actual": 2,
+      "ok": true
+    },
+    {
+      "name": "helper started a new Firefox after a kill",
+      "expected": true,
+      "actual": true,
+      "ok": true
+    },
+    {
+      "name": "second crash in the window exits 3",
+      "expected": 3,
+      "actual": 3,
+      "ok": true
+    },
+    {
+      "name": "SIGTERM exits 0",
+      "expected": 0,
+      "actual": 0,
+      "ok": true
+    },
+    {
+      "name": "SIGTERM closed Firefox",
+      "expected": false,
+      "actual": false,
+      "ok": true
+    },
+    {
+      "name": "SIGINT exits 0",
+      "expected": 0,
+      "actual": 0,
+      "ok": true
+    },
+    {
+      "name": "SIGTERM during start-up exits 0",
+      "expected": 0,
+      "actual": 0,
+      "ok": true
+    },
+    {
+      "name": "no Firefox left on the profile",
+      "expected": "",
+      "actual": "",
+      "ok": true
+    }
+  ],
+  "restartLog": [
+    "2026-10-09T04:50:44.961Z firefox started pid=12111 extension=moz-extension://ceb3fcee-4912-4444-8197-c7e9c724ca1c/",
+    "2026-10-09T04:50:44.984Z firefox exited",
+    "2026-10-09T04:50:44.984Z restarting in 500 ms",
+    "2026-10-09T04:50:47.413Z firefox started pid=12476 extension=moz-extension://ceb3fcee-4912-4444-8197-c7e9c724ca1c/",
+    "2026-10-09T04:50:47.429Z firefox exited",
+    "2026-10-09T04:50:47.429Z crash loop: 2 crashes in 10 minutes; giving up"
+  ],
+  "passed": true
+}
