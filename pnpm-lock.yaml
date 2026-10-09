@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      puppeteer-core:
+        specifier: ^25.12.0
+        version: 25.12.0(yauzl@3.4.0)
     devDependencies:
       '@types/node':
         specifier: ^24.19.1
