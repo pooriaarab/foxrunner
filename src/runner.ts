@@ -69,6 +69,7 @@ export interface RunnerEvents {
 }
 
 export const TASK_PREFIX = "frn:task:";
+const INTERRUPTED = "interrupted: the page unloaded or the browser stopped during this step";
 
 class PermanentError extends Error {}
 
@@ -142,6 +143,14 @@ export function createRunner(options: RunnerOptions) {
     const task = await load(id);
     if (!task) return false;
     const def = definitions.get(task.name);
+    if (task.status === "running") {
+      const cut = task.steps.find((s) => s.status === "running");
+      if (!cut) throw new Error(`task ${id} is running but has no running step`);
+      fail(task, cut, INTERRUPTED, false, def);
+      await save(task);
+      emit("step", { task: structuredClone(task), step: structuredClone(cut) });
+      return true;
+    }
     if (task.status !== "queued" || (task.runAt ?? 0) > now()) return false;
     const step = task.steps.find((s) => s.status !== "done");
     if (!step) {
@@ -155,14 +164,23 @@ export function createRunner(options: RunnerOptions) {
       return false;
     }
     const stepDef = def.find((s) => s.name === step.name);
-    if (!stepDef) throw new Error(`the definition of ${task.name} has no step ${step.name}`);
+    if (!stepDef) {
+      fail(task, step, `the definition of ${task.name} has no step ${step.name}`, true);
+      await save(task);
+      return false;
+    }
     step.status = "running";
     step.attempt += 1;
     step.startedAt = now();
     delete step.error;
     task.status = "running";
     delete task.runAt;
-    await save(task);
+    try {
+      await save(task);
+    } catch (error) {
+      emit("error", { id, message: `task ${id} not started: ${message(error)}` });
+      return false;
+    }
     const results = Object.fromEntries(task.steps.filter((s) => s.status === "done").map((s) => [s.name, s.output]));
     const ctx: StepContext = { taskId: id, input: task.input, results, attempt: step.attempt, idempotencyKey: `${id}:${step.name}` };
     try {
@@ -175,7 +193,13 @@ export function createRunner(options: RunnerOptions) {
     } catch (error) {
       fail(task, step, message(error), error instanceof PermanentError, def);
     }
-    await save(task);
+    try {
+      await save(task);
+    } catch (error) {
+      // Keep the step "running" in storage; the next wake treats it as cut short.
+      emit("error", { id, message: `task ${id} step ${step.name} result not saved: ${message(error)}` });
+      return false;
+    }
     emit("step", { task: structuredClone(task), step: structuredClone(step) });
     return true;
   }
@@ -195,9 +219,10 @@ export function createRunner(options: RunnerOptions) {
 
   async function list(): Promise<TaskRecord[]> {
     const tasks: TaskRecord[] = [];
-    for (const [, raw] of await store.entries(TASK_PREFIX)) {
+    for (const [key, raw] of await store.entries(TASK_PREFIX)) {
       const parsed = parseTask(raw);
       if (parsed.ok) tasks.push(parsed.task);
+      else emit("error", { id: key.slice(TASK_PREFIX.length), message: `task ${key.slice(TASK_PREFIX.length)} skipped: ${parsed.message}` });
     }
     return tasks.toSorted((a, b) => b.createdAt - a.createdAt);
   }
