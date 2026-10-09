@@ -446,6 +446,11 @@ export function createRunner(options: RunnerOptions) {
       const def = definitions.get(name);
       if (!def) throw new Error(`no task named ${name}; call define() first`);
       const id = opts.id ?? crypto.randomUUID();
+      const found = await load(id);
+      if (found) {
+        void drive(id);
+        return found;
+      }
       const made = await lock(`foxrunner:task:${id}`, async () => {
         const existing = await load(id);
         if (existing) return existing;
@@ -464,7 +469,12 @@ export function createRunner(options: RunnerOptions) {
         await save(task);
         return task;
       });
-      const task = made.ran ? made.value : await load(id);
+      let task = made.ran ? made.value : await load(id);
+      // Another page holds the lock while it writes this task. Wait for the write.
+      for (let i = 0; !task && i < 100; i++) {
+        await new Promise((r) => setTimeout(r, 20));
+        task = await load(id);
+      }
       if (!task) throw new Error(`task ${id} could not be read back`);
       void drive(id);
       return task;
@@ -514,16 +524,15 @@ export function createRunner(options: RunnerOptions) {
       const done = await lock(`foxrunner:task:${id}`, async () => {
         const task = await load(id);
         if (!task) throw new Error(`no task with id ${id}`);
-        if (task.status === "paused") task.status = "queued";
-        else if (task.status === "waiting") {
-          const step = task.steps.find((s) => s.status === "waiting");
-          if (step) {
-            step.status = "pending";
-            step.reply = reply;
-          }
+        if (task.status !== "paused" && task.status !== "waiting") return;
+        // A waiting step can also sit in a paused task. Give it the reply.
+        const step = task.steps.find((s) => s.status === "waiting");
+        if (step) {
+          step.status = "pending";
+          if (reply !== undefined || task.status === "waiting") step.reply = reply;
           delete task.prompt;
-          task.status = "queued";
-        } else return;
+        }
+        task.status = "queued";
         await store.remove(CONTROL_PREFIX + id);
         await save(task);
       });

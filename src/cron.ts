@@ -44,15 +44,15 @@ export function parseCron(expr: string): Cron {
   if (parts.length !== 5) throw new Error(`cron "${expr}" needs 5 fields: minute hour day-of-month month day-of-week`);
   const [minute, hour, dom, month, dow] = parts.map((p, i) => parseField(p, FIELDS[i]!)) as [Set<number>, Set<number>, Set<number>, Set<number>, Set<number>];
   if (dow.has(7)) dow.add(0);
-  return { minute, hour, dom, month, dow, domAny: parts[2] === "*", dowAny: parts[4] === "*" };
+  return { minute, hour, dom, month, dow, domAny: parts[2]!.startsWith("*"), dowAny: parts[4]!.startsWith("*") };
 }
 
+// As in Vixie cron: a day field that starts with * (such as */2) does not
+// switch the two day fields to "either matches".
 function dayMatches(cron: Cron, d: Date) {
   const dom = cron.dom.has(d.getDate());
   const dow = cron.dow.has(d.getDay());
-  if (cron.domAny) return dow;
-  if (cron.dowAny) return dom;
-  return dom || dow;
+  return cron.domAny || cron.dowAny ? dom && dow : dom || dow;
 }
 
 /** The first matching minute strictly after `after` (ms since epoch). */

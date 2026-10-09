@@ -151,7 +151,7 @@ flowchart LR
 | Method | What it does |
 |---|---|
 | `define(name, steps)` | Defines a task. A step is `{ name, run(ctx), retry? }`. |
-| `start(name, input, { id }?)` | Saves and starts a task. With the same `id`, it returns the first task. |
+| `start(name, input, { id }?)` | Saves and starts a task. With the same `id`, it returns the first task, also when two pages call it at once. |
 | `schedule(name, { every \| cron, input, catchUp, overlap, id })` | Runs a task every `every` ms (at least 60000) or on a 5-field cron string in local time. `catchUp`: `"once"` (default) or `"skip"`. `overlap`: `"skip"` (default) or `"allow"`. Calling it again keeps the next slot. |
 | `unschedule(id)`, `schedules()` | Removes or lists schedules. |
 | `get(id)`, `list()` | Reads one task or all tasks, newest first. |
@@ -220,6 +220,7 @@ pnpm e2e
 - A step must end before Firefox unloads the idle event page (30 seconds by default). Use `ctx.sleep()` for long waits. A step that always needs more time fails after `maxAttempts`.
 - A cut-short step is found only at the next wake, up to `watchdogMs` later.
 - Schedules run at most once a minute. Cron has 5 fields in local time, with no names such as `MON`.
+- A cron slot in the hour that a spring-forward clock change skips (such as `0 2 * * *`) does not run that day. Vixie cron runs it after the change.
 - Events from `on()` reach only the page that runs the runner. Other pages read storage or send a message.
 - Finished tasks stay in storage. There is no delete or retention API yet.
 - `list()` reads all of `storage.local`, so it slows down with many thousands of records.

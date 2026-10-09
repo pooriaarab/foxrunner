@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SCHEMA_VERSION, type TaskRecord } from "../src/index.js";
+import { memoryStore, SCHEMA_VERSION, type LocksLike, type TaskRecord } from "../src/index.js";
 import { flakyStore, setup } from "./helpers.js";
 
 const stored = (over: Partial<TaskRecord> = {}): TaskRecord => ({
@@ -115,6 +115,31 @@ describe("runner core", () => {
     expect(one.id).toBe(two.id);
     expect(runs).toBe(1);
     expect((await runner.list()).length).toBe(1);
+  });
+
+  it("V2 gives two pages that start one id the same task", async () => {
+    const inner = memoryStore();
+    // A slow store widens the window between the existence check and the write.
+    const store = { ...inner, set: async (k: string, v: unknown) => (await new Promise((r) => setTimeout(r, 15)), inner.set(k, v)) };
+    const held = new Set<string>();
+    const locks: LocksLike = {
+      request: async (name, _opts, fn) => {
+        if (held.has(name)) return fn(null);
+        held.add(name);
+        try {
+          return await fn({ name });
+        } finally {
+          held.delete(name);
+        }
+      },
+    };
+    const one = setup({ store, locks });
+    const two = setup({ store, locks });
+    for (const r of [one.runner, two.runner]) r.define("job", [{ name: "a", run: () => 1 }]);
+    const [a, b] = await Promise.all([one.runner.start("job", {}, { id: "same" }), two.runner.start("job", {}, { id: "same" })]);
+    expect(a.id).toBe("same");
+    expect(b.id).toBe("same");
+    await Promise.all([one.runner.tick(), two.runner.tick()]);
   });
 
   it("T7 rejects an unknown task name and keeps a stored one queued", async () => {
