@@ -21,5 +21,6 @@ await build({
   target: "firefox153",
   logLevel: "warning",
 });
-for (const file of files.filter((f) => !f.endsWith(".js"))) cpSync(`extension/${file}`, `dist-ext/${file}`, { recursive: true });
+// amo-metadata.json is the AMO listing, not a part of the add-on.
+for (const file of files.filter((f) => !f.endsWith(".js") && f !== "amo-metadata.json")) cpSync(`extension/${file}`, `dist-ext/${file}`, { recursive: true });
 console.log(`Built dist-ext/ (version ${pkg.version}).`);

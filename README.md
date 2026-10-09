@@ -15,6 +15,9 @@ foxrunner has two parts:
 npm i foxrunner
 ```
 
+Install the add-on from AMO: [addons.mozilla.org/firefox/addon/foxrunner](https://addons.mozilla.org/firefox/addon/foxrunner/)
+(pending AMO review; the link works after approval).
+
 foxrunner needs Firefox 153 or later. The helper needs Node 24 or later.
 
 ## Example
