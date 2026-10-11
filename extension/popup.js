@@ -21,8 +21,8 @@ function stepMeta(step) {
   return parts.join(", ");
 }
 
-function button(label, type, id) {
-  return el("button", { type: "button", textContent: label, onclick: () => send({ type, id }) });
+function button(label, type, id, className = "small") {
+  return el("button", { type: "button", className, textContent: label, onclick: () => send({ type, id }) });
 }
 
 function render(tasks) {
@@ -32,12 +32,12 @@ function render(tasks) {
       const actions = el("div", { className: "actions" });
       if (["queued", "running", "waiting"].includes(task.status)) actions.append(button("Pause", "pause", task.id));
       if (task.status === "paused") actions.append(button("Resume", "resume", task.id));
-      if (!["done", "failed", "cancelled"].includes(task.status)) actions.append(button("Cancel", "cancel", task.id));
+      if (!["done", "failed", "cancelled"].includes(task.status)) actions.append(button("Cancel", "cancel", task.id, "small ghost"));
       return el(
         "li",
         {},
         el("div", { className: "top" }, el("strong", { textContent: task.name }), el("span", { className: "id", textContent: task.id.slice(0, 8) }), el("span", { className: `badge ${task.status}`, textContent: task.status })),
-        el("ul", { className: "steps" }, ...task.steps.map((s) => el("li", {}, el("span", { textContent: MARK[s.status] ?? "·" }), el("span", { className: "name", textContent: s.name }), el("span", { className: "meta", textContent: stepMeta(s) })))),
+        el("ul", { className: "steps" }, ...task.steps.map((s) => el("li", { className: s.status }, el("span", { className: "mark", textContent: MARK[s.status] ?? "·" }), el("span", { className: "name", textContent: s.name }), el("span", { className: "meta", textContent: stepMeta(s) })))),
         el("div", { className: "meta", textContent: wakeText(task) }),
         task.error ? el("div", { className: "error", textContent: task.error }) : "",
         actions,
