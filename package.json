@@ -1,7 +1,7 @@
 {
   "name": "foxrunner",
   "version": "0.1.3",
-  "description": "Durable agent tasks in Firefox: steps that resume, schedules, and a headless helper.",
+  "description": "Durable Firefox extension tasks with saved steps, retries, cron schedules, browser storage, and a Puppeteer headless helper.",
   "type": "module",
   "license": "MIT",
   "author": "Pooria Arab",
@@ -52,5 +52,22 @@
   },
   "dependencies": {
     "puppeteer-core": "^25.12.0"
-  }
+  },
+  "keywords": [
+    "firefox",
+    "webextensions",
+    "task-runner",
+    "durable-execution",
+    "cron",
+    "scheduling",
+    "retries",
+    "browser-storage",
+    "puppeteer",
+    "webdriver-bidi",
+    "headless-firefox",
+    "typescript",
+    "idempotency",
+    "background-tasks",
+    "web-locks"
+  ]
 }
