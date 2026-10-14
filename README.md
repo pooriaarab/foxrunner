@@ -1,54 +1,31 @@
 # foxrunner
 
-Durable agent tasks in Firefox: steps that resume, schedules, and a headless helper.
+[![npm version](https://img.shields.io/npm/v/foxrunner)](https://www.npmjs.com/package/foxrunner)
+[![Downloads/month](https://img.shields.io/npm/dm/foxrunner)](https://www.npmjs.com/package/foxrunner)
+[![MIT license](https://img.shields.io/npm/l/foxrunner)](https://opensource.org/license/mit)
+![Types included](https://img.shields.io/badge/types-included-blue)
 
-A foxrunner task is a list of named steps. The runner saves each step's state before the step starts and after it ends. Firefox unloads an extension's event page when it is idle, and it can also crash or restart. In each case the task goes on from the last finished step.
+[Setup](#install) · [API reference](#runtime-surfaces) · [Comparisons](#compare) · [Source](https://github.com/pooriaarab/foxrunner)
 
-foxrunner has two parts:
-
-- A library for the extension's event page. It runs tasks, retries, sleeps on alarms, and runs schedules.
-- A command, `foxrunner helper`, that keeps Firefox running with your extension on a mini PC or a server.
+foxrunner is an open-source task runner for Firefox extension authors and browser-agent developers.
+It saves named step records, retries failed steps, and wakes scheduled work through browser alarms.
+A Node.js helper starts Firefox with your extension and restarts it after crashes.
 
 ## Install
 
 ```bash
-npm i foxrunner
+npm install foxrunner
 ```
 
-Install the add-on from AMO: [addons.mozilla.org/firefox/addon/foxrunner](https://addons.mozilla.org/firefox/addon/foxrunner/)
-(pending AMO review; the link works after approval).
+The helper and development tools require Node.js 24 or later.
+The demo targets Firefox 153 or later.
+The package includes TypeScript types and one direct runtime dependency, `puppeteer-core`.
 
-foxrunner needs Firefox 153 or later. The helper needs Node 24 or later.
+## Run your first task
 
-## Example
-
-In your extension's background script (an event page in Manifest V3):
-
-```js
-import { createRunner, storageAreaStore } from "foxrunner";
-
-const runner = createRunner({ store: storageAreaStore(browser.storage.local), browser });
-
-runner.define("report", [
-  { name: "collect", run: (ctx) => ({ url: ctx.input.url }) },
-  { name: "wait", run: (ctx) => ctx.sleep(2 * 60_000) },
-  {
-    name: "send",
-    retry: { maxAttempts: 5, backoffMs: 2000 },
-    run: async (ctx) => {
-      const res = await fetch(ctx.results.collect.url, { headers: { "Idempotency-Key": ctx.idempotencyKey } });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return { status: res.status };
-    },
-  },
-]);
-
-runner.schedule("report", { cron: "0 7 * * 1-5", input: { url: "https://example.com/" } });
-```
-
-The manifest needs the `storage` and `alarms` permissions, and a host permission for the URL that the step fetches. Call `define()` and `schedule()` in the first turn of the script, so they are ready on every wake.
-
-The same API runs in Node with an in-memory store. With no `browser` object, nothing wakes the runner, so call `tick()` yourself:
+Save this example as `quickstart.mjs`, then run `node quickstart.mjs`.
+It uses memory storage and needs no browser, credentials, environment variables, or `.env` file.
+Success prints `Hello, Ada`.
 
 ```js
 import { createRunner, memoryStore } from "foxrunner";
@@ -65,78 +42,92 @@ console.log((await runner.get(task.id)).steps.at(-1).output);
 // Hello, Ada
 ```
 
-## Use cases
+Memory storage is temporary. Use `storageAreaStore(browser.storage.local)` for persistent extension records.
+In a Firefox background script, pass `browser` to `createRunner` and grant `storage` and `alarms` permissions.
+Define task steps before the first `await` on every background-page load.
+Grant host access only for sites your step code calls.
 
-| Who | What they build | How foxrunner helps |
-|---|---|---|
-| A developer of a browser agent | Scheduled agent jobs, such as "check my orders every morning" | `schedule()` runs the job on a cron string. A run missed while Firefox was closed runs once at the next start. |
-| An automation author | A long form-filling flow that waits for an email code | Each page of the form is a step. `waitForInput()` parks the task until the user types the code into `resume()`. |
-| A person who watches prices or pages | Nightly scraping and checks | Steps retry with backoff. A step cut short by an unload runs again, and the idempotency key stops a second side effect. |
-| An extension author | Background work that must finish, such as an upload queue | Each step is saved, so the queue survives event page unloads, Firefox restarts and crashes. |
-| A kiosk or home-lab owner | An always-on Firefox on a mini PC or a server | `foxrunner helper` keeps Firefox and the extension running, and starts Firefox again after a crash. |
-| A test engineer | Firefox E2E tests that restart the browser with one profile | `launchFirefox()` from `foxrunner/helper` starts Firefox with a persistent profile and a pinned extension UUID. |
+```js
+import { createRunner, storageAreaStore } from "foxrunner";
+
+const runner = createRunner({ store: storageAreaStore(browser.storage.local), browser });
+runner.define("reminder", [
+  { name: "message", run: () => ({ text: "Check today's tasks" }) },
+]);
+await runner.schedule("reminder", { cron: "0 7 * * 1-5" });
+```
 
 ## How it works
 
-A task moves through these states. Each change is saved before anything else happens.
-
-```mermaid
-stateDiagram-v2
-    [*] --> queued: start()
-    queued --> running: a step starts
-    running --> queued: step done, sleep(), or retry backoff
-    running --> queued: page unloaded mid-step (next wake)
-    running --> waiting: waitForInput()
-    waiting --> queued: resume(id, reply)
-    queued --> paused: pause()
-    running --> paused: pause()
-    paused --> queued: resume(id)
-    queued --> done: no steps left
-    running --> failed: maxAttempts reached
-    queued --> cancelled: cancel()
-    running --> cancelled: cancel()
-    paused --> cancelled: cancel()
-    done --> [*]
-    failed --> [*]
-    cancelled --> [*]
+```text
+start / schedule -> stored task -> named step -> save result -> next step
+                                      |
+                               interrupted or failed
+                                      |
+                              save retry time -> alarm
+waitForInput -> waiting -> resume(reply) -> queued
+Node.js helper -> Firefox + persistent profile -> your extension
 ```
 
-foxrunner does not try to keep the event page alive. Firefox unloads it when it is idle (after 30 seconds by default), and open ports do not stop that. Instead, foxrunner keeps one alarm, `frn:wake`, set to the next moment a task needs the page:
+Step state is saved before execution and after completion.
+An unfinished `running` step consumes a failed attempt when another owner resumes it.
+An alarm wakes due sleeps, retry backoff, schedules, and interrupted work.
+Completed step outputs feed later steps through `ctx.results`.
 
-- the end of a sleep or a retry backoff
-- the next schedule slot
-- `watchdogMs` (default 30 s) ahead while a step runs
+## Why it exists
 
-When the page loads again, the runner reads the stored tasks. A step that is still marked `running` with no owner was cut short. It counts as one failed attempt and runs again.
+Firefox extension event pages can unload before a long task finishes.
+foxrunner stores progress in the extension's own storage and resumes work on the next wake.
+Temporal and Inngest provide durable execution systems for application workflows beyond a browser extension.
 
-```mermaid
-sequenceDiagram
-    participant P as Event page
-    participant S as storage.local
-    participant A as alarms
-    P->>S: step "slow" = running, attempt 1
-    P->>A: frn:wake in watchdogMs
-    Note over P: Firefox unloads the idle page mid-step
-    A-->>P: frn:wake fires, Firefox loads a new page
-    P->>S: read tasks: "slow" is running with no owner
-    P->>S: 1 failure "interrupted", retry after backoff
-    P->>S: step "slow" = running, attempt 2
-    P->>S: step "slow" = done, output saved
-```
+## Compare
 
-Nothing in an extension runs while Firefox is closed. The helper covers that gap:
+Scope checked on 2026-10-14 against the linked official documentation.
 
-```mermaid
-flowchart LR
-    OS[launchd, systemd or a terminal] --> H[foxrunner helper]
-    H -- WebDriver BiDi --> F[Firefox, headless or with a window]
-    F --> E[Your extension's event page]
-    E --> R[foxrunner runner]
-    R --> S[(storage.local in the profile)]
-    H -- crash: start again --> F
-```
+| Scope | foxrunner | [Temporal](https://docs.temporal.io/workflows) | [Inngest](https://www.inngest.com/docs/durable-execution) |
+|---|---|---|---|
+| Main role | Firefox task steps and schedules | Durable Workflow Executions | Coordinated durable functions |
+| State model | Task and step records in supplied store | Workflow execution history | Saved completed-step results |
+| Configuration | JavaScript step definitions | Workflow Definitions | Functions and step primitives |
+| Browser support here | Extension library and Firefox helper | Application-defined browser work | Application-defined browser work |
 
-## API
+## Coverage
+
+| Surface | Status | Behavior |
+|---|---|---|
+| Firefox WebExtensions | Implemented | Alarms and startup listeners wake stored tasks |
+| Firefox `storage.local` | Implemented adapter | Persistent task, schedule, and control records |
+| Memory storage | Implemented adapter | Temporary records for examples and tests |
+| Interval schedules | Implemented | At least 60,000 ms between slots |
+| Cron schedules | Implemented | Five numeric fields in local time |
+| Web Locks | Implemented | Task ownership across extension pages when available |
+| Puppeteer / WebDriver BiDi | Implemented | Helper launches Firefox and installs an unpacked extension |
+| Model Context Protocol (MCP) server | — | No server or tool registry exported |
+
+Source inventory: two storage adapters, two schedule modes, and one CLI command with six flags.
+WebDriver Bidirectional (BiDi) communication runs through `puppeteer-core` in the Node.js helper.
+Local tests cover runner, records, cron, storage, and helper behavior.
+No live vendor integration or credential verification applies to this package.
+This rewrite does not run the separate Firefox end-to-end suite.
+
+## Common use cases
+
+1. Firefox agent authors: schedule a weekday check and resume unfinished steps after the next browser wake.
+2. Extension authors: park a task with `waitForInput()` and resume it after their UI collects a reply.
+3. API automation authors: pass `ctx.idempotencyKey` to an API that supports duplicate-request suppression.
+4. Home-lab operators: run `foxrunner helper` under systemd with an unpacked Firefox extension.
+5. QA engineers: launch Firefox through `foxrunner/helper` with a persistent test profile.
+
+## Features
+
+- **Saved step records:** persistent state through a supplied storage adapter.
+- **Retries:** per-step limits and exponential backoff.
+- **Waits:** alarm-backed sleep and explicit user-input pauses.
+- **Schedules:** interval or cron slots, catch-up policy, and overlap control.
+- **Task controls:** pause, resume, cancel, list, and event listeners.
+- **Firefox helper:** persistent profile, stable extension universally unique identifier (UUID), and bounded crash restarts.
+
+## Runtime surfaces
 
 `createRunner(options)` returns a runner. Options:
 
@@ -164,9 +155,9 @@ flowchart LR
 
 A step's `run(ctx)` gets `taskId`, `input`, `results` (earlier outputs by step name), `attempt`, `idempotencyKey` (the same for every attempt), `signal` (aborts on pause or cancel) and `reply`. It returns JSON, `ctx.sleep(ms)`, or `ctx.waitForInput(prompt)`.
 
-Also exported: `memoryStore`, `storageAreaStore`, `parseTask`, `parseCron`, `nextCron`, and the record types. `foxrunner/helper` exports `launchFirefox`, `runHelper`, `findFirefox` and `stableUuid` for Node.
+Also exported: `memoryStore`, `storageAreaStore`, `parseTask`, `parseCron`, `nextCron`, `Sleep`, `WaitForInput`, schema/status constants, and record types. `foxrunner/helper` exports `launchFirefox`, `runHelper`, `findFirefox`, `geckoId`, `stableUuid`, `SetupError`, and `EXIT` for Node.
 
-## CLI
+### CLI
 
 ```bash
 npx foxrunner helper --extension ./my-extension --profile ~/.foxrunner/profile
@@ -185,41 +176,17 @@ The helper logs one line per event to stdout: `helper loading` once, `starting f
 
 | Exit code | Meaning |
 |---|---|
-| 0 | Stopped by SIGINT or SIGTERM. Firefox is closed. A signal before `helper loading` can still end the helper with no exit code, because Node is still starting. |
+| 0 | Stopped by SIGINT or SIGTERM. Firefox is closed. The CLI registers signal handlers before loading the helper module. |
 | 1 | Bad command line |
 | 2 | Cannot find Firefox, cannot read the extension, or the first start failed |
 | 3 | Crash loop: more than `--max-restarts` crashes in 10 minutes |
 
 The helper installs the extension as a temporary add-on on each start. It pins the extension's UUID from its gecko id and sets Firefox to keep the storage of a removed temporary add-on, so tasks survive restarts.
 
-## Try the demo
-
-```bash
-pnpm install
-pnpm e2e
-```
-
-`pnpm e2e` builds the extension in `extension/` with `--e2e`, which adds a test content script on `http://127.0.0.1/*`, and runs it in a real Firefox. The release build that AMO signs does not have that script. It writes `artifacts/e2e-<date>.json`, `artifacts/helper-<date>.json` and a popup screenshot. To try the popup yourself, run `pnpm build:ext` and load `dist-ext/manifest.json` from `about:debugging`.
-
-## Firefox APIs used
-
-| API | Why |
-|---|---|
-| [`alarms`](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/alarms) | One wake alarm for sleeps, retries, schedules and the watchdog |
-| [`storage.local`](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/storage/local) | Task, schedule and control records |
-| [`runtime.onStartup` / `onInstalled`](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/runtime) | Wake the runner when Firefox starts or the extension loads, to resume tasks and catch up schedules |
-| [MV3 background scripts (event page)](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Background_scripts) | Where the runner lives. It unloads when idle, so the runner saves everything. |
-| [`runtime.onMessage` / `sendMessage`](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/runtime/onMessage) | The demo popup talks to the event page |
-| [`runtime.reload`](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/runtime/reload) | The E2E test reloads the demo mid-task |
-| [Web Locks (`navigator.locks`)](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API) | One owner per task across extension pages |
-| [`AbortController`](https://developer.mozilla.org/en-US/docs/Web/API/AbortController) | `ctx.signal` for pause and cancel |
-| [`crypto.randomUUID`](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/randomUUID) | Task ids |
-| [WebDriver BiDi](https://firefox-source-docs.mozilla.org/remote/index.html) (outside the extension) | The helper starts Firefox and installs the extension through puppeteer-core |
-
-## Limits
+## Delivery and behavior limits
 
 - Nothing runs while Firefox is closed, unless the helper runs. foxrunner does not install the helper as a service. Run it under launchd, systemd or Task Scheduler yourself.
-- A step runs at least once, not exactly once. A step cut short runs again. Use `ctx.idempotencyKey` to skip work that already happened.
+- An interrupted step can run again. Use `ctx.idempotencyKey` with a destination that supports deduplication, or track completed side effects yourself.
 - A step must end before Firefox unloads the idle event page (30 seconds by default). Use `ctx.sleep()` for long waits. A step that always needs more time fails after `maxAttempts`.
 - A cut-short step is found only at the next wake, up to `watchdogMs` later.
 - Schedules run at most once a minute. Cron has 5 fields in local time, with no names such as `MON`.
@@ -230,17 +197,78 @@ pnpm e2e
 - The helper loads unpacked extension folders only, not `.xpi` files.
 - foxrunner does not use the `idle` API yet, so it cannot hold heavy steps until the user is away.
 
-## Part of the fox primitives
+## Integration guides
 
-```mermaid
-flowchart LR
-    foxrunner --> foxmate
-    click foxrunner "https://github.com/pooriaarab/foxrunner"
-    click foxmate "https://github.com/pooriaarab/foxmate"
+- [Firefox extension setup](#run-your-first-task) shows permissions, persistent storage, and task registration.
+- [Helper command reference](#cli) lists every command flag and exit code.
+- [Scheduling and retry API](#runtime-surfaces) describes catch-up, overlap, sleep, and backoff.
+
+### Demo and local verification
+
+```bash
+pnpm install
+pnpm ci:local
+pnpm e2e
 ```
 
-foxrunner depends on no other fox repo. [foxmate](https://github.com/pooriaarab/foxmate), the reference agent, uses it for scheduled and long-running agent tasks. See all repos at [github.com/pooriaarab](https://github.com/pooriaarab).
+`ci:local` checks lint, types, unit tests, library build, demo build, extension lint, and the add-on listing.
+`e2e` requires Firefox and runs the demo and helper against local fixtures.
+It writes dated JSON artifacts and a popup screenshot.
+To inspect the demo manually, run `pnpm build:ext` and load `dist-ext/manifest.json` through Firefox's temporary add-on screen.
+
+## Status
+
+Version 0.1.3 is an early release. APIs and record behavior can change during the 0.x series.
+Report problems through [GitHub issues](https://github.com/pooriaarab/foxrunner/issues).
+Public case studies are not yet published in this repository.
+
+## FAQ
+
+### What is foxrunner?
+
+foxrunner runs named task steps and schedules inside Firefox extensions.
+It also includes a Node.js helper that keeps Firefox running with your unpacked extension.
+
+### Which integrations are verified?
+
+foxrunner includes storage, alarm, locking, and helper paths covered by local tests.
+It has no vendor API catalog requiring credential verification.
+
+### Does foxrunner provide a managed task service?
+
+foxrunner runs in your extension and helper process.
+You supply storage, task code, and any service manager used to keep the helper running.
+
+### How is foxrunner different from Temporal?
+
+foxrunner stores task and step records in a supplied store for Firefox work.
+[Temporal](https://docs.temporal.io/workflows) represents durable work as Workflow Executions from Workflow Definitions.
+
+### How is foxrunner different from Inngest?
+
+foxrunner wakes extension tasks through Firefox alarms.
+[Inngest](https://www.inngest.com/docs/durable-execution) coordinates durable functions and stores their completed step results.
+
+### Does foxrunner prevent duplicate side effects?
+
+foxrunner supplies a stable per-step `idempotencyKey` across attempts.
+Your destination or application must use it to deduplicate repeated effects.
+
+### Does foxrunner run while Firefox is closed?
+
+foxrunner's extension library runs only while Firefox runs.
+The helper launches Firefox, and you can run that helper under your own service manager.
+
+### Can foxrunner wait for a user reply?
+
+foxrunner parks a step when it returns `ctx.waitForInput(prompt)`.
+Call `resume(id, reply)` to queue that step again with the reply in its context.
+
+### Does foxrunner have an MCP server?
+
+foxrunner exposes a library and the `helper` command.
+It has no Model Context Protocol (MCP) server.
 
 ## License
 
-MIT
+MIT. See the [MIT license text](https://opensource.org/license/mit).
